@@ -1,0 +1,94 @@
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+!.env.sample
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+*credentials*
+*secret*
+secrets/
+
+# AWS local credentials/config
+.aws/
+aws-credentials
+credentials.csv
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+crash.*.log
+*.tfvars
+*.tfvars.json
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+terraform.tfplan
+*.tfplan
+
+# Ansible
+*.retry
+.ansible/
+.vault_pass
+.vault-password
+vault-password*
+ansible.log
+fact_cache/
+
+# Kubernetes
+kubeconfig
+kubeconfig.*
+*.kubeconfig
+.kube/
+*.kubeconfig.yaml
+
+# Docker
+docker-compose.override.yml
+.docker/
+docker-data/
+volumes/
+
+# Prometheus / Grafana local data
+prometheus-data/
+prometheus_data/
+grafana-data/
+grafana_data/
+grafana-storage/
+*.db
+*.sqlite
+*.sqlite3
+
+# Logs and runtime files
+*.log
+logs/
+tmp/
+temp/
+*.pid
+
+# Editor / OS files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Python tooling often used with Ansible
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+env/
+
+# Node tooling often used for docs/tools
+node_modules/
+dist/
+build/
