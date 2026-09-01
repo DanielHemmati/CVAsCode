@@ -38,16 +38,54 @@ The project should demonstrate production-grade AWS infrastructure, multi-accoun
 
 ## Terraform Structure
 
-Use the existing Terraform direction:
+Use a `Terraform: Up & Running` inspired structure. Keep deployed infrastructure, reusable modules, runnable examples, and automated tests separate:
 
 ```text
 terraform/
-├── modules/
 ├── live/
+│   ├── management/
+│   ├── security/
+│   ├── shared/
+│   ├── dev/
+│   ├── prod/
+│   └── global/
+├── modules/
+├── examples/
 └── test/
 ```
 
-Recommended module candidates:
+`terraform/live/` contains real deployable root modules. Each leaf directory should be a focused root module with its own state file:
+
+```text
+terraform/live/
+├── management/
+│   ├── organization/
+│   ├── identity-center/
+│   └── ci-oidc/
+├── security/
+│   ├── logging/
+│   └── security-baseline/
+├── shared/
+│   ├── dns/
+│   └── observability/
+├── dev/
+│   ├── services/
+│   │   ├── static-site/
+│   │   └── api/
+│   └── data-stores/
+│       └── dynamodb/
+├── prod/
+│   ├── services/
+│   │   ├── static-site/
+│   │   └── api/
+│   └── data-stores/
+│       └── dynamodb/
+└── global/
+    ├── iam/
+    └── s3-state/
+```
+
+`terraform/modules/` contains reusable Terraform modules. Do not put real environment configuration or state-specific backend config here:
 
 ```text
 terraform/modules/
@@ -62,18 +100,27 @@ terraform/modules/
 └── ci-oidc/
 ```
 
-Recommended live environments:
+`terraform/examples/` contains runnable examples that show how to consume modules. Examples belong outside `terraform/modules/`:
 
 ```text
-terraform/live/
-├── management/
-├── security/
-├── shared/
-├── dev/
-└── prod/
+terraform/examples/
+├── static-site-basic/
+├── api-visitor-counter/
+├── database-dynamodb/
+└── observability-basic/
 ```
 
-Each live stack should have a focused state file. Avoid one large Terraform state for the whole platform.
+`terraform/test/` contains automated tests for modules and examples, including native Terraform tests and Terratest where useful:
+
+```text
+terraform/test/
+├── static-site/
+├── api/
+├── database/
+└── terratest/
+```
+
+Each Terraform root module should usually contain `main.tf`, `variables.tf`, `outputs.tf`, `providers.tf`, and `backend.tf`. Use small focused live stacks and avoid one large Terraform state for the whole platform.
 
 ## Quality Gates
 
