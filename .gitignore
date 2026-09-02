@@ -16,6 +16,10 @@ secrets/
 .aws/
 aws-credentials
 credentials.csv
+terraform/aws-config/credentials
+terraform/aws-config/credentials.*
+terraform/aws-config/*.local
+terraform/aws-config/sso/cache/
 
 # Terraform
 .terraform/
