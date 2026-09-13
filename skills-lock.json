@@ -1,6 +1,12 @@
 {
   "version": 1,
   "skills": {
+    "simple-english": {
+      "source": "AminBlg/SimpleEnglish",
+      "sourceType": "github",
+      "skillPath": "skills/simple-english/SKILL.md",
+      "computedHash": "c0edc1e9c22326d0e53cf68f3965148c0751190dc74b4aa03cd4f5229de6742c"
+    },
     "terraform-skill": {
       "source": "antonbabenko/terraform-skill",
       "sourceType": "github",
