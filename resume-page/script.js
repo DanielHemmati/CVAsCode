@@ -30,5 +30,3 @@ if (words.length && !reduceMotion) {
     i = (i + 1) % words.length;
   }, 1200);
 }
-
-document.getElementById("print-btn").addEventListener("click", () => window.print());
