@@ -33,7 +33,7 @@ data "aws_iam_policy_document" "github_actions_trust" {
     condition {
       test     = "StringEquals"
       variable = "token.actions.githubusercontent.com:sub"
-      values   = [var.github_subject]
+      values   = [var.github_subject] # in this case it should match production
     }
   }
 }
