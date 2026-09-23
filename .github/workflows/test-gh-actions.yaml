@@ -1,0 +1,17 @@
+name: Show GitHub workspace
+
+on:
+  workflow_dispatch: {}
+
+permissions: {}
+
+jobs:
+  show-workspace:
+    name: Print workspace path
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Print GITHUB_WORKSPACE
+        run: |
+          echo "GITHUB_WORKSPACE=${GITHUB_WORKSPACE}"
+          pwd
