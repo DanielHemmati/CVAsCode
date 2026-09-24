@@ -58,7 +58,14 @@ jobs:
           actor_html="$(escape_html "${WORKFLOW_ACTOR}")"
           workflow_url_html="$(escape_html "${WORKFLOW_URL}")"
 
-          message="$(printf '<b>GitHub Actions | %s</b>\n\n<b>Workflow</b>\n<code>%s</code>\n\n<b>Repository</b>\n<code>%s</code>\n\n<b>Branch</b>\n<code>%s</code>\n\n<b>Event</b>\n<code>%s</code>\n\n<b>Actor</b>\n<code>%s</code>\n\n<a href="%s">View workflow run</a>' \
+          if [[ "${WORKFLOW_RESULT}" == "success" ]]; then
+            status_emoji="✅"
+          else
+            status_emoji="❌"
+          fi
+
+          message="$(printf '%s <b>GitHub Actions | %s</b>\n\n<b>Workflow</b>\n<code>%s</code>\n\n<b>Repository</b>\n<code>%s</code>\n\n<b>Branch</b>\n<code>%s</code>\n\n<b>Event</b>\n<code>%s</code>\n\n<b>Actor</b>\n<code>%s</code>\n\n<a href="%s">View workflow run</a>' \
+            "${status_emoji}" \
             "${workflow_result_html}" \
             "${workflow_name_html}" \
             "${repository_html}" \
