@@ -54,7 +54,8 @@ resource "aws_cloudfront_origin_access_control" "website" {
   signing_protocol                  = "sigv4"
 }
 
-# TODO: figure out which one of these are default
+# we don't need waf currently
+#trivy:ignore:AVD-AWS-0011
 resource "aws_cloudfront_distribution" "website" {
   enabled             = true
   is_ipv6_enabled     = true
