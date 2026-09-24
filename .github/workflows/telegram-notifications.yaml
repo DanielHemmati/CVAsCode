@@ -42,14 +42,30 @@ jobs:
             exit 1
           fi
 
-          message="$(printf 'GitHub Actions: %s\nWorkflow: %s\nRepository: %s\nBranch: %s\nEvent: %s\nActor: %s\nRun: %s' \
-            "${WORKFLOW_RESULT}" \
-            "${WORKFLOW_NAME}" \
-            "${REPOSITORY}" \
-            "${WORKFLOW_BRANCH}" \
-            "${WORKFLOW_EVENT}" \
-            "${WORKFLOW_ACTOR}" \
-            "${WORKFLOW_URL}")"
+          escape_html() {
+            local escaped="${1}"
+            escaped="${escaped//&/&amp;}"
+            escaped="${escaped//</&lt;}"
+            escaped="${escaped//>/&gt;}"
+            printf '%s' "${escaped}"
+          }
+
+          workflow_name_html="$(escape_html "${WORKFLOW_NAME}")"
+          workflow_result_html="$(escape_html "${WORKFLOW_RESULT^^}")"
+          repository_html="$(escape_html "${REPOSITORY}")"
+          branch_html="$(escape_html "${WORKFLOW_BRANCH}")"
+          event_html="$(escape_html "${WORKFLOW_EVENT}")"
+          actor_html="$(escape_html "${WORKFLOW_ACTOR}")"
+          workflow_url_html="$(escape_html "${WORKFLOW_URL}")"
+
+          message="$(printf '<b>GitHub Actions | %s</b>\n\n<b>Workflow</b>\n<code>%s</code>\n\n<b>Repository</b>\n<code>%s</code>\n\n<b>Branch</b>\n<code>%s</code>\n\n<b>Event</b>\n<code>%s</code>\n\n<b>Actor</b>\n<code>%s</code>\n\n<a href="%s">View workflow run</a>' \
+            "${workflow_result_html}" \
+            "${workflow_name_html}" \
+            "${repository_html}" \
+            "${branch_html}" \
+            "${event_html}" \
+            "${actor_html}" \
+            "${workflow_url_html}")"
 
           curl \
             --fail-with-body \
@@ -59,4 +75,5 @@ jobs:
             --url "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
             --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
             --data-urlencode "text=${message}" \
+            --data-urlencode "parse_mode=HTML" \
             --data-urlencode "disable_web_page_preview=true"
