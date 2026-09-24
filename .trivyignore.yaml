@@ -1,0 +1,20 @@
+misconfigurations:
+  - id: AVD-AWS-0011
+    paths:
+      - "**/static-site/main.tf"
+    statement: AWS WAF is intentionally omitted from this temporary static resume site to avoid unnecessary cost and complexity.
+
+  - id: AVD-AWS-0089
+    paths:
+      - "**/static-site/main.tf"
+    statement: S3 access logging is intentionally omitted because direct bucket access is restricted to CloudFront OAC.
+
+  - id: AVD-AWS-0132
+    paths:
+      - "**/static-site/main.tf"
+    statement: Public website assets intentionally use cost-free SSE-S3 encryption instead of a customer-managed KMS key.
+
+  - id: AVD-AWS-0132
+    paths:
+      - "**/globals/s3-backend/main.tf"
+    statement: This temporary Terraform state backend intentionally uses SSE-S3 to avoid the operational complexity of a customer-managed KMS key.

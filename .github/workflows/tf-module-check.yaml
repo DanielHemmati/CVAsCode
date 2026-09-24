@@ -6,6 +6,7 @@ on:
     paths:
       - "terraform/modules/**"
       - ".tflint.hcl"
+      - ".trivyignore.yaml"
       - ".github/workflows/tf-module-check.yaml"
 
   push:
@@ -14,6 +15,7 @@ on:
     paths:
       - "terraform/modules/**"
       - ".tflint.hcl"
+      - ".trivyignore.yaml"
       - ".github/workflows/tf-module-check.yaml"
 
   workflow_dispatch: {}
@@ -104,6 +106,7 @@ jobs:
           scan-type: config
           scan-ref: terraform
           skip-dirs: terraform/live # b/c i want to see the path like `modules/globals/s3-backend/main.tf`
+          trivyignores: .trivyignore.yaml
           version: v0.70.0
           format: table
           severity: HIGH,CRITICAL
