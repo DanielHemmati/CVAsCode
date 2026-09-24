@@ -54,8 +54,6 @@ resource "aws_cloudfront_origin_access_control" "website" {
   signing_protocol                  = "sigv4"
 }
 
-# we don't need waf currently
-#trivy:ignore:AVD-AWS-0011
 resource "aws_cloudfront_distribution" "website" {
   enabled             = true
   is_ipv6_enabled     = true
@@ -98,4 +96,3 @@ resource "aws_s3_bucket_policy" "website" {
 
   depends_on = [aws_s3_bucket_public_access_block.website]
 }
-
