@@ -1,17 +1,20 @@
-name: Show GitHub workspace
+name: Bash matrix
 
 on:
+  push:
   workflow_dispatch: {}
 
 permissions: {}
 
 jobs:
-  show-workspace:
+  greet:
     name: Print workspace path
     runs-on: ubuntu-24.04
 
+    strategy:
+      matrix:
+        name: [Alice, bob]
+
     steps:
-      - name: Print GITHUB_WORKSPACE
-        run: |
-          echo "GITHUB_WORKSPACE=${GITHUB_WORKSPACE}"
-          pwd
+      - name: Print greeting
+        run: echo "Hello, ${{ matrix.name }}"
