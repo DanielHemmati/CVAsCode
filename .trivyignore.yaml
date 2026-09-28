@@ -18,3 +18,8 @@ misconfigurations:
     paths:
       - "**/globals/s3-backend/main.tf"
     statement: This temporary Terraform state backend intentionally uses SSE-S3 to avoid the operational complexity of a customer-managed KMS key.
+
+  - id: AVD-AWS-0132
+    paths:
+      - "**/globals/plan-artifacts/main.tf"
+    statement: Private Terraform plan files use SSE-S3 because a customer-managed KMS key is not required for this project.
