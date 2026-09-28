@@ -7,7 +7,7 @@ on:
       - "terraform/modules/**"
       - ".tflint.hcl"
       - ".trivyignore.yaml"
-      - ".github/workflows/tf-module-check.yaml"
+      - ".github/workflows/tf-module.yaml"
 
   push:
     branches:
@@ -16,7 +16,7 @@ on:
       - "terraform/modules/**"
       - ".tflint.hcl"
       - ".trivyignore.yaml"
-      - ".github/workflows/tf-module-check.yaml"
+      - ".github/workflows/tf-module.yaml"
 
   workflow_dispatch: {}
 
