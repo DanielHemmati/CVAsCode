@@ -1,0 +1,405 @@
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
+name: Terraform live deployment
+
+on:
+  pull_request:
+    paths:
+      - "terraform/live/**"
+      - ".tflint.hcl"
+      - ".trivyignore.yaml"
+      - ".github/workflows/tf-live.yaml"
+
+  push:
+    branches:
+      - main
+    paths:
+      - "terraform/live/**"
+      - ".tflint.hcl"
+      - ".trivyignore.yaml"
+      - ".github/workflows/tf-live.yaml"
+
+  workflow_dispatch:
+    inputs:
+      apply:
+        description: Request apply after the checks and plans succeed
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  AWS_REGION: us-east-1
+  AWS_ROLE_ARN: arn:aws:iam::814023476338:role/github-actions-cvascode
+  TF_IN_AUTOMATION: "true"
+  TF_INPUT: "false"
+  TF_PLAN_BUCKET: cvascode-814023476338-terraform-plans
+  TERRAFORM_VERSION: "1.16.1"
+  TFLINT_VERSION: "v0.64.0"
+
+jobs:
+  check-live:
+    name: Check live Terraform
+    runs-on: ubuntu-24.04
+    outputs:
+      stacks: ${{ steps.discover.outputs.stacks }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # Manual runs can select any branch; block unreviewed Terraform from using production credentials.
+      # This steps stops a manual run when you select a branch other than main.
+      - name: Require main for manual deployments
+        if: github.event_name == 'workflow_dispatch' && github.ref != 'refs/heads/main'
+        run: |
+          echo "::error::Run manual deployments from the main branch."
+          exit 1
+
+      - name: Install Terraform
+        uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+          terraform_wrapper: false
+
+      - name: Install TFLint
+        uses: terraform-linters/setup-tflint@1cf010d3c7aef302051ccdb68c14c5dc2efa34ef # v6.3.1
+        with:
+          tflint_version: ${{ env.TFLINT_VERSION }}
+          checksums: |
+            cca9d13e2e1d7a2c627af60ff899a3c9b74212899416aeb96ec764d2ef954537
+          cache: true
+          tflint_config_path: .tflint.hcl
+
+      - name: Initialize TFLint plugins
+        run: tflint --config="${GITHUB_WORKSPACE}/.tflint.hcl" --init
+
+      - name: Check Terraform formatting
+        run: terraform fmt -check -recursive -diff terraform/live
+
+      - name: Discover and validate live stacks
+        id: discover
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          stacks='[]'
+
+          while IFS= read -r backend_file; do
+            stack_path="${backend_file%/backend.tf}"
+            stack_name="${stack_path#terraform/live/}"
+            artifact_name="$(printf '%s' "${stack_name}" | sha256sum)"
+            artifact_name="${artifact_name%% *}"
+
+            echo "::group::${stack_path}"
+
+            terraform -chdir="${stack_path}" init \
+              -backend=false \
+              -input=false \
+              -lockfile=readonly
+
+            terraform -chdir="${stack_path}" validate -no-color
+
+            echo "::endgroup::"
+
+            stacks="$(
+              jq -c \
+                --arg path "${stack_path}" \
+                --arg name "${stack_name}" \
+                --arg artifact "${artifact_name}" \
+                '. + [{"path": $path, "name": $name, "artifact": $artifact}]' \
+                <<<"${stacks}"
+            )"
+          done < <(git ls-files "terraform/live/**/backend.tf")
+
+          if [[ "$(jq length <<<"${stacks}")" -eq 0 ]]; then
+            echo "::error::No live Terraform stacks with a backend.tf file were found."
+            exit 1
+          fi
+
+          echo "stacks=${stacks}" >> "${GITHUB_OUTPUT}"
+
+      - name: Lint live Terraform
+        run: |
+          tflint \
+            --chdir=terraform/live \
+            --recursive \
+            --config="${GITHUB_WORKSPACE}/.tflint.hcl" \
+            --format=compact \
+            --minimum-failure-severity=warning
+
+      - name: Scan live Terraform with Trivy
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        env:
+          TRIVY_TF_EXCLUDE_DOWNLOADED_MODULES: "true"
+        with:
+          scan-type: config
+          scan-ref: terraform/live
+          trivyignores: .trivyignore.yaml
+          version: v0.70.0
+          format: table
+          severity: HIGH,CRITICAL
+          exit-code: "1"
+          hide-progress: true
+
+  plan:
+    name: Plan ${{ matrix.name }}
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    needs: check-live
+    runs-on: ubuntu-24.04
+    # The environment approval also preserves the environment-scoped AWS OIDC trust.
+    environment:
+      name: production
+    permissions:
+      contents: read # should be repeated b/c job-level permissions replace top-level permissios set instead of adding to it.
+      id-token: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.check-live.outputs.stacks) }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install Terraform
+        uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+          terraform_wrapper: false
+
+      - name: authenticate with AWS
+        uses: aws-actions/configure-aws-credentials@8df5847569e6427dd6c4fb1cf565c83acfa8afa7 # v6.0.0
+        with:
+          role-to-assume: ${{ env.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Initialize Terraform
+        env:
+          TF_ROOT: ${{ matrix.path }}
+        run: |
+          terraform -chdir="${TF_ROOT}" init \
+            -input=false \
+            -lockfile=readonly
+
+      - name: Create saved plan
+        env:
+          PLAN_PREFIX: runs/${{ github.run_id }}/${{ github.run_attempt }}/${{ github.sha }}/${{ matrix.artifact }}
+          TF_ROOT: ${{ matrix.path }}
+        run: |
+          set -euo pipefail
+
+          plan_dir="${RUNNER_TEMP}/terraform-plan"
+          plan_uri="s3://${TF_PLAN_BUCKET}/${PLAN_PREFIX}"
+          mkdir -p "${plan_dir}"
+
+          put_private_file() {
+            aws s3api put-object \
+              --bucket "${TF_PLAN_BUCKET}" \
+              --key "$2" \
+              --body "$1" \
+              --server-side-encryption AES256 \
+              --if-none-match "*" \
+              --query VersionId \
+              --output text
+          }
+
+          if ! terraform -chdir="${TF_ROOT}" plan \
+            -input=false \
+            -lock-timeout=5m \
+            -no-color \
+            -out="${plan_dir}/terraform.tfplan" \
+            > "${plan_dir}/plan-command.txt" \
+            2> "${plan_dir}/plan-error.txt"; then
+            put_private_file \
+              "${plan_dir}/plan-command.txt" \
+              "${PLAN_PREFIX}/diagnostics/plan-command.txt" > /dev/null
+            put_private_file \
+              "${plan_dir}/plan-error.txt" \
+              "${PLAN_PREFIX}/diagnostics/plan-error.txt" > /dev/null
+            echo "::error::Terraform plan failed. Private diagnostics: ${plan_uri}/"
+            exit 1
+          fi
+
+          if ! terraform -chdir="${TF_ROOT}" show \
+            -no-color \
+            "${plan_dir}/terraform.tfplan" \
+            > "${plan_dir}/plan.txt" \
+            2> "${plan_dir}/show-error.txt"; then
+            put_private_file \
+              "${plan_dir}/show-error.txt" \
+              "${PLAN_PREFIX}/diagnostics/show-error.txt" > /dev/null
+            echo "::error::Terraform show failed. Private diagnostics: ${plan_uri}/diagnostics/show-error.txt"
+            exit 1
+          fi
+
+          read -r plan_digest _ < <(sha256sum "${plan_dir}/terraform.tfplan")
+          plan_key="${PLAN_PREFIX}/terraform-${plan_digest}.tfplan"
+          plan_text_key="${PLAN_PREFIX}/plan-${plan_digest}.txt"
+
+          plan_version="$(put_private_file "${plan_dir}/terraform.tfplan" "${plan_key}")"
+          plan_text_version="$(put_private_file "${plan_dir}/plan.txt" "${plan_text_key}")"
+
+          jq -n \
+            --arg bucket "${TF_PLAN_BUCKET}" \
+            --arg plan_key "${plan_key}" \
+            --arg plan_version "${plan_version}" \
+            --arg plan_digest "${plan_digest}" \
+            --arg plan_text_key "${plan_text_key}" \
+            --arg plan_text_version "${plan_text_version}" \
+            '{
+              bucket: $bucket,
+              plan_key: $plan_key,
+              plan_version: $plan_version,
+              plan_digest: $plan_digest,
+              plan_text_key: $plan_text_key,
+              plan_text_version: $plan_text_version
+            }' > "${plan_dir}/manifest.json"
+
+          echo "Private plan: s3://${TF_PLAN_BUCKET}/${plan_text_key} (version ${plan_text_version})"
+          echo "Saved plan SHA-256: ${plan_digest} (version ${plan_version})"
+
+      # This public artifact contains only the private S3 key, version, and digest.
+      - name: Upload plan manifest
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: terraform-plan-manifest-${{ matrix.artifact }}-${{ github.sha }}
+          path: ${{ runner.temp }}/terraform-plan/manifest.json
+          if-no-files-found: error
+          retention-days: 5
+
+  apply:
+    name: Apply ${{ matrix.name }}
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      github.event_name == 'workflow_dispatch' &&
+      inputs.apply
+    needs:
+      - check-live
+      - plan
+    runs-on: ubuntu-24.04
+    # Require a reviewer for this environment in Settings > Environments > production.
+    environment:
+      name: production
+    permissions:
+      contents: read
+      id-token: write
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        include: ${{ fromJSON(needs.check-live.outputs.stacks) }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install Terraform
+        uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+          terraform_wrapper: false
+
+      - name: Authenticate with AWS
+        uses: aws-actions/configure-aws-credentials@8df5847569e6427dd6c4fb1cf565c83acfa8afa7 # v6.0.0
+        with:
+          role-to-assume: ${{ env.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Download plan manifest
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: terraform-plan-manifest-${{ matrix.artifact }}-${{ github.sha }}
+          path: ${{ runner.temp }}/terraform-plan-manifest
+
+      - name: Download saved plan
+        env:
+          PLAN_PREFIX: runs/${{ github.run_id }}/${{ github.run_attempt }}/${{ github.sha }}/${{ matrix.artifact }}
+          STACK_ARTIFACT: ${{ matrix.artifact }}
+        run: |
+          set -euo pipefail
+
+          plan_dir="${RUNNER_TEMP}/terraform-plan"
+          manifest="${RUNNER_TEMP}/terraform-plan-manifest/manifest.json"
+          mkdir -p "${plan_dir}"
+
+          manifest_bucket="$(jq -er '.bucket' "${manifest}")"
+          plan_key="$(jq -er '.plan_key' "${manifest}")"
+          plan_version="$(jq -er '.plan_version' "${manifest}")"
+          expected_digest="$(jq -er '.plan_digest' "${manifest}")"
+
+          if [[ ! "${expected_digest}" =~ ^[0-9a-f]{64}$ || -z "${plan_version}" ]]; then
+            echo "::error::The plan manifest contains invalid integrity metadata."
+            exit 1
+          fi
+
+          expected_key_pattern="^runs/${GITHUB_RUN_ID}/[0-9]+/${GITHUB_SHA}/${STACK_ARTIFACT}/terraform-${expected_digest}\\.tfplan$"
+          if [[ "${manifest_bucket}" != "${TF_PLAN_BUCKET}" || ! "${plan_key}" =~ ${expected_key_pattern} ]]; then
+            echo "::error::The plan manifest does not match this workflow run."
+            exit 1
+          fi
+
+          aws s3api get-object \
+            --bucket "${TF_PLAN_BUCKET}" \
+            --key "${plan_key}" \
+            --version-id "${plan_version}" \
+            "${plan_dir}/terraform.tfplan" > /dev/null
+
+          read -r actual_digest _ < <(sha256sum "${plan_dir}/terraform.tfplan")
+          if [[ "${actual_digest}" != "${expected_digest}" ]]; then
+            echo "::error::The exact saved plan does not match the manifest SHA-256 digest."
+            exit 1
+          fi
+
+          echo "TF_PLAN_DIGEST=${expected_digest}" >> "${GITHUB_ENV}"
+
+      - name: Initialize Terraform
+        env:
+          TF_ROOT: ${{ matrix.path }}
+        run: |
+          terraform -chdir="${TF_ROOT}" init \
+            -input=false \
+            -lockfile=readonly
+
+      - name: Apply saved plan
+        env:
+          PLAN_PREFIX: runs/${{ github.run_id }}/${{ github.run_attempt }}/${{ github.sha }}/${{ matrix.artifact }}
+          TF_ROOT: ${{ matrix.path }}
+        run: |
+          set -euo pipefail
+
+          plan_dir="${RUNNER_TEMP}/terraform-plan"
+          plan_uri="s3://${TF_PLAN_BUCKET}/${PLAN_PREFIX}"
+          apply_log="${plan_dir}/apply.txt"
+          apply_log_key="${PLAN_PREFIX}/apply-${TF_PLAN_DIGEST}.txt"
+
+          put_apply_log() {
+            aws s3api put-object \
+              --bucket "${TF_PLAN_BUCKET}" \
+              --key "${apply_log_key}" \
+              --body "${apply_log}" \
+              --server-side-encryption AES256 \
+              --if-none-match "*" \
+              --query VersionId \
+              --output text
+          }
+
+          if ! terraform -chdir="${TF_ROOT}" apply \
+            -input=false \
+            -lock-timeout=5m \
+            -no-color \
+            "${plan_dir}/terraform.tfplan" \
+            > "${apply_log}" 2>&1; then
+            apply_log_version="$(put_apply_log)"
+            echo "::error::Terraform apply failed. Private log: ${plan_uri}/apply-${TF_PLAN_DIGEST}.txt (version ${apply_log_version})"
+            exit 1
+          fi
+
+          apply_log_version="$(put_apply_log)"
+          echo "Terraform apply completed for ${TF_ROOT}."
+          echo "Private apply log: ${plan_uri}/apply-${TF_PLAN_DIGEST}.txt (version ${apply_log_version})"
