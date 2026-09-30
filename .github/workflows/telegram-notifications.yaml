@@ -7,6 +7,7 @@ on:
       - Test AWS OIDC
       - Show GitHub workspace
       - Terraform module checks
+      - Terraform live deployment
     types:
       - completed
 
@@ -16,15 +17,17 @@ jobs:
   notify:
     name: Send Telegram notification
     if: >-
-      github.event.workflow_run.conclusion == 'success' ||
-      github.event.workflow_run.conclusion == 'failure'
+      !contains(fromJSON('["skipped", "neutral"]'), github.event.workflow_run.conclusion)
     runs-on: ubuntu-24.04
     timeout-minutes: 2
+    permissions:
+      actions: read # read the job list of the finished run
 
     steps:
       - name: Send workflow result to Telegram
         shell: bash
         env:
+          GH_TOKEN: ${{ github.token }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           WORKFLOW_NAME: ${{ github.event.workflow_run.name }}
@@ -33,7 +36,16 @@ jobs:
           WORKFLOW_EVENT: ${{ github.event.workflow_run.event }}
           WORKFLOW_ACTOR: ${{ github.event.workflow_run.actor.login }}
           WORKFLOW_URL: ${{ github.event.workflow_run.html_url }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+          RUN_NUMBER: ${{ github.event.workflow_run.run_number }}
+          RUN_ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
+          RUN_STARTED_AT: ${{ github.event.workflow_run.run_started_at }}
+          RUN_UPDATED_AT: ${{ github.event.workflow_run.updated_at }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          COMMIT_MESSAGE: ${{ github.event.workflow_run.head_commit.message }}
+          PR_NUMBER: ${{ github.event.workflow_run.pull_requests[0].number }}
           REPOSITORY: ${{ github.repository }}
+          SERVER_URL: ${{ github.server_url }}
         run: |
           set -euo pipefail
 
@@ -42,37 +54,124 @@ jobs:
             exit 1
           fi
 
+          max_job_lines=15
+          max_commit_length=120
+
+          # Values are used in text and inside href="...", so escape quotes too.
+          # Replacements are quoted: in bash 5.2+ an unquoted & means "the matched text".
           escape_html() {
             local escaped="${1}"
-            escaped="${escaped//&/&amp;}"
-            escaped="${escaped//</&lt;}"
-            escaped="${escaped//>/&gt;}"
+            escaped="${escaped//&/'&amp;'}"
+            escaped="${escaped//</'&lt;'}"
+            escaped="${escaped//>/'&gt;'}"
+            escaped="${escaped//\"/'&quot;'}"
             printf '%s' "${escaped}"
           }
 
-          workflow_name_html="$(escape_html "${WORKFLOW_NAME}")"
-          workflow_result_html="$(escape_html "${WORKFLOW_RESULT^^}")"
-          repository_html="$(escape_html "${REPOSITORY}")"
-          branch_html="$(escape_html "${WORKFLOW_BRANCH}")"
-          event_html="$(escape_html "${WORKFLOW_EVENT}")"
-          actor_html="$(escape_html "${WORKFLOW_ACTOR}")"
-          workflow_url_html="$(escape_html "${WORKFLOW_URL}")"
+          conclusion_emoji() {
+            case "${1}" in
+              success) printf '✅' ;;
+              failure) printf '❌' ;;
+              cancelled) printf '⚪' ;;
+              timed_out) printf '⏱️' ;;
+              skipped) printf '⏭️' ;;
+              *) printf '⚠️' ;;
+            esac
+          }
 
-          if [[ "${WORKFLOW_RESULT}" == "success" ]]; then
-            status_emoji="✅"
-          else
-            status_emoji="❌"
+          format_duration() {
+            local seconds="${1}"
+            if (( seconds >= 3600 )); then
+              printf '%dh %dm' $(( seconds / 3600 )) $(( seconds % 3600 / 60 ))
+            elif (( seconds >= 60 )); then
+              printf '%dm %ds' $(( seconds / 60 )) $(( seconds % 60 ))
+            else
+              printf '%ds' "${seconds}"
+            fi
+          }
+
+          repository_html="$(escape_html "${REPOSITORY}")"
+          repository_url="${SERVER_URL}/${REPOSITORY}"
+
+          # Header: result and workflow.
+          status_emoji="$(conclusion_emoji "${WORKFLOW_RESULT}")"
+          header="${status_emoji} <b>$(escape_html "${WORKFLOW_NAME}")</b> — $(escape_html "${WORKFLOW_RESULT}")"
+
+          # Meta line: where, how, which run, how long.
+          meta="${repository_html##*/} · $(escape_html "${WORKFLOW_BRANCH}") · $(escape_html "${WORKFLOW_EVENT}") · #${RUN_NUMBER}"
+          if (( RUN_ATTEMPT > 1 )); then
+            meta+=" (attempt ${RUN_ATTEMPT})"
+          fi
+          if started_epoch="$(date -d "${RUN_STARTED_AT}" +%s 2>/dev/null)" \
+            && updated_epoch="$(date -d "${RUN_UPDATED_AT}" +%s 2>/dev/null)" \
+            && (( updated_epoch >= started_epoch )); then
+            meta+=" · $(format_duration $(( updated_epoch - started_epoch )))"
+          fi
+          meta+=" · by $(escape_html "${WORKFLOW_ACTOR}")"
+
+          # Commit line: short SHA link and first line of the message.
+          commit_url="${repository_url}/commit/${HEAD_SHA}"
+          commit_subject="${COMMIT_MESSAGE%%$'\n'*}"
+          if (( ${#commit_subject} > max_commit_length )); then
+            commit_subject="${commit_subject:0:max_commit_length}…"
+          fi
+          commit_line="<a href=\"$(escape_html "${commit_url}")\"><code>${HEAD_SHA:0:7}</code></a>"
+          if [[ -n "${commit_subject}" ]]; then
+            commit_line+=" $(escape_html "${commit_subject}")"
           fi
 
-          message="$(printf '%s <b>GitHub Actions | %s</b>\n\n<b>Workflow</b>\n<code>%s</code>\n\n<b>Repository</b>\n<code>%s</code>\n\n<b>Branch</b>\n<code>%s</code>\n\n<b>Event</b>\n<code>%s</code>\n\n<b>Actor</b>\n<code>%s</code>\n\n<a href="%s">View workflow run</a>' \
-            "${status_emoji}" \
-            "${workflow_result_html}" \
-            "${workflow_name_html}" \
-            "${repository_html}" \
-            "${branch_html}" \
-            "${event_html}" \
-            "${actor_html}" \
-            "${workflow_url_html}")"
+          # Jobs: one line per job, with the failed step and a job link on failure.
+          job_lines=()
+          job_count=0
+          if jobs_data="$(gh api \
+            "repos/${REPOSITORY}/actions/runs/${RUN_ID}/attempts/${RUN_ATTEMPT}/jobs?per_page=100" \
+            --jq '.jobs[] | [
+              (.conclusion // "unknown"),
+              .name,
+              ((.steps // []) | map(select(.conclusion == "failure")) | first | .name // ""),
+              .html_url
+            ] | join("\u001f")' 2>/dev/null)"; then
+            while IFS=$'\x1f' read -r job_conclusion job_name failed_step job_url; do
+              [[ -n "${job_name}" ]] || continue
+              job_count=$(( job_count + 1 ))
+              (( job_count <= max_job_lines )) || continue
+
+              job_line="$(conclusion_emoji "${job_conclusion}") $(escape_html "${job_name}")"
+              if [[ "${job_conclusion}" != "success" && "${job_conclusion}" != "skipped" ]]; then
+                if [[ -n "${failed_step}" ]]; then
+                  job_line+=" → $(escape_html "${failed_step}")"
+                fi
+                job_line+=" (<a href=\"$(escape_html "${job_url}")\">logs</a>)"
+              fi
+              job_lines+=("${job_line}")
+            done <<<"${jobs_data}"
+
+            if (( job_count > max_job_lines )); then
+              job_lines+=("…and $(( job_count - max_job_lines )) more")
+            fi
+          else
+            echo "::warning::Could not read the job list. Sending the message without job details."
+          fi
+
+          # Links row.
+          links="<a href=\"$(escape_html "${WORKFLOW_URL}")\">Run</a> · <a href=\"$(escape_html "${commit_url}")\">Commit</a>"
+          if [[ -n "${PR_NUMBER}" ]]; then
+            links+=" · <a href=\"$(escape_html "${repository_url}/pull/${PR_NUMBER}")\">PR #${PR_NUMBER}</a>"
+          fi
+
+          lines=("${header}" "${meta}" "" "${commit_line}")
+          if (( ${#job_lines[@]} > 0 )); then
+            lines+=("" "<b>Jobs</b>" "${job_lines[@]}")
+          fi
+          lines+=("" "${links}")
+          message="$(printf '%s\n' "${lines[@]}")"
+
+          # Successes arrive silently; everything else makes a sound.
+          if [[ "${WORKFLOW_RESULT}" == "success" ]]; then
+            disable_notification=true
+          else
+            disable_notification=false
+          fi
 
           curl \
             --fail-with-body \
@@ -83,4 +182,5 @@ jobs:
             --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
             --data-urlencode "text=${message}" \
             --data-urlencode "parse_mode=HTML" \
-            --data-urlencode "disable_web_page_preview=true"
+            --data-urlencode "disable_web_page_preview=true" \
+            --data-urlencode "disable_notification=${disable_notification}"

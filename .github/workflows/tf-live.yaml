@@ -189,7 +189,7 @@ jobs:
 
       - name: Create saved plan
         env:
-          PLAN_PREFIX: runs/${{ github.run_id }}/${{ github.run_attempt }}/${{ github.sha }}/${{ matrix.artifact }}
+          PLAN_PREFIX: stacks/${{ matrix.name }}/runs/${{ github.run_id }}/attempt-${{ github.run_attempt }}/${{ github.sha }}
           TF_ROOT: ${{ matrix.path }}
         run: |
           set -euo pipefail
@@ -319,8 +319,7 @@ jobs:
 
       - name: Download saved plan
         env:
-          PLAN_PREFIX: runs/${{ github.run_id }}/${{ github.run_attempt }}/${{ github.sha }}/${{ matrix.artifact }}
-          STACK_ARTIFACT: ${{ matrix.artifact }}
+          PLAN_PREFIX: stacks/${{ matrix.name }}/runs/${{ github.run_id }}/attempt-${{ github.run_attempt }}/${{ github.sha }}
         run: |
           set -euo pipefail
 
@@ -338,8 +337,8 @@ jobs:
             exit 1
           fi
 
-          expected_key_pattern="^runs/${GITHUB_RUN_ID}/[0-9]+/${GITHUB_SHA}/${STACK_ARTIFACT}/terraform-${expected_digest}\\.tfplan$"
-          if [[ "${manifest_bucket}" != "${TF_PLAN_BUCKET}" || ! "${plan_key}" =~ ${expected_key_pattern} ]]; then
+          expected_plan_key="${PLAN_PREFIX}/terraform-${expected_digest}.tfplan"
+          if [[ "${manifest_bucket}" != "${TF_PLAN_BUCKET}" || "${plan_key}" != "${expected_plan_key}" ]]; then
             echo "::error::The plan manifest does not match this workflow run."
             exit 1
           fi
@@ -368,7 +367,7 @@ jobs:
 
       - name: Apply saved plan
         env:
-          PLAN_PREFIX: runs/${{ github.run_id }}/${{ github.run_attempt }}/${{ github.sha }}/${{ matrix.artifact }}
+          PLAN_PREFIX: stacks/${{ matrix.name }}/runs/${{ github.run_id }}/attempt-${{ github.run_attempt }}/${{ github.sha }}
           TF_ROOT: ${{ matrix.path }}
         run: |
           set -euo pipefail
