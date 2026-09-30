@@ -5,6 +5,7 @@ on:
   pull_request:
     paths:
       - "terraform/live/**"
+      - "terraform/modules/**"
       - ".tflint.hcl"
       - ".trivyignore.yaml"
       - ".github/workflows/tf-live.yaml"
@@ -14,6 +15,7 @@ on:
       - main
     paths:
       - "terraform/live/**"
+      - "terraform/modules/**"
       - ".tflint.hcl"
       - ".trivyignore.yaml"
       - ".github/workflows/tf-live.yaml"
@@ -149,10 +151,12 @@ jobs:
 
   plan:
     name: Plan ${{ matrix.name }}
-    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     needs: check-live
     runs-on: ubuntu-24.04
-    # The environment approval also preserves the environment-scoped AWS OIDC trust.
+    # Preserve the environment-scoped AWS OIDC trust.
     environment:
       name: production
     permissions:
@@ -277,13 +281,13 @@ jobs:
     name: Apply ${{ matrix.name }}
     if: >-
       github.ref == 'refs/heads/main' &&
-      github.event_name == 'workflow_dispatch' &&
-      inputs.apply
+      (github.event_name == 'push' ||
+      (github.event_name == 'workflow_dispatch' && inputs.apply))
     needs:
       - check-live
       - plan
     runs-on: ubuntu-24.04
-    # Require a reviewer for this environment in Settings > Environments > production.
+    # Preserve the environment-scoped AWS OIDC trust.
     environment:
       name: production
     permissions:
