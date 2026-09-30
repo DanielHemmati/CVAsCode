@@ -1,7 +1,6 @@
 name: Bash matrix
 
 on:
-  push:
   workflow_dispatch: {}
 
 permissions: {}
