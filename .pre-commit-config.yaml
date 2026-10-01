@@ -15,4 +15,4 @@ repos:
           - --hook-config=--tool-version=0.24.0
           - --hook-config=--create-file-if-not-exist=true
           - --hook-config=--add-to-existing-file=true
-          - --args=--config=__GIT_WORKING_DIR__/.terraform-docs.yaml
+          - --args=--config=.terraform-docs.yaml
