@@ -1,3 +1,9 @@
+locals {
+  tags = merge(var.tags, {
+    Name = var.bucket_name
+  })
+}
+
 resource "aws_s3_bucket" "website" {
   bucket = var.bucket_name
 
@@ -5,9 +11,7 @@ resource "aws_s3_bucket" "website" {
   # So it doesn't matter
   force_destroy = true
 
-  tags = merge(var.tags, {
-    Name = var.bucket_name
-  })
+  tags = local.tags
 }
 
 # INFO: learn more about this
