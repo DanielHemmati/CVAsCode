@@ -1,0 +1,104 @@
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
+name: Deploy Resume Site
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-resume-production
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: us-east-1
+  AWS_ROLE_ARN: arn:aws:iam::814023476338:role/github-actions-cvascode
+  TERRAFORM_VERSION: "1.16.1"
+  TF_IN_AUTOMATION: "true"
+  TF_INPUT: "false"
+  TF_ROOT: terraform/live/prod/static-site
+
+jobs:
+  deploy:
+    name: Deploy resume assets
+    runs-on: ubuntu-24.04
+    environment:
+      name: production
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Require main branch
+        if: github.ref != 'refs/heads/main'
+        run: |
+          echo "::error::Run manual deployments from the main branch."
+          exit 1
+
+      - name: Check out deployment commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install Terraform
+        uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+          terraform_wrapper: false
+
+      - name: Authenticate with AWS
+        uses: aws-actions/configure-aws-credentials@8df5847569e6427dd6c4fb1cf565c83acfa8afa7 # v6.0.0
+        with:
+          role-to-assume: ${{ env.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Read static-site outputs
+        id: infrastructure
+        run: |
+          set -euo pipefail
+
+          terraform -chdir="${TF_ROOT}" init \
+            -input=false \
+            -lockfile=readonly
+
+          bucket="$(terraform -chdir="${TF_ROOT}" output -raw bucket_id)"
+          distribution_id="$(terraform -chdir="${TF_ROOT}" output -raw cloudfront_distribution_id)"
+          website_url="$(terraform -chdir="${TF_ROOT}" output -raw website_url)"
+
+          {
+            echo "bucket=${bucket}"
+            echo "distribution_id=${distribution_id}"
+            echo "website_url=${website_url}"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Sync resume assets to S3
+        env:
+          SITE_BUCKET: ${{ steps.infrastructure.outputs.bucket }}
+        run: |
+          aws s3 sync \
+            resume-page/ \
+            "s3://${SITE_BUCKET}" \
+            --delete \
+            --only-show-errors
+
+      - name: Invalidate CloudFront cache
+        env:
+          DISTRIBUTION_ID: ${{ steps.infrastructure.outputs.distribution_id }}
+        run: |
+          set -euo pipefail
+
+          invalidation_id="$(
+            aws cloudfront create-invalidation \
+              --distribution-id "${DISTRIBUTION_ID}" \
+              --paths "/*" \
+              --query 'Invalidation.Id' \
+              --output text
+          )"
+
+          aws cloudfront wait invalidation-completed \
+            --distribution-id "${DISTRIBUTION_ID}" \
+            --id "${invalidation_id}"
+
+      - name: Verify deployed site
+        env:
+          WEBSITE_URL: ${{ steps.infrastructure.outputs.website_url }}
+        run: curl --fail --location --retry 5 --retry-delay 5 "${WEBSITE_URL}"
