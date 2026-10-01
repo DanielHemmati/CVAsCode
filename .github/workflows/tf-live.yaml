@@ -20,6 +20,7 @@ on:
       - ".trivyignore.yaml"
       - ".github/workflows/tf-live.yaml"
 
+  # TODO: i don't think we need this. might delete
   workflow_dispatch:
     inputs:
       apply:
