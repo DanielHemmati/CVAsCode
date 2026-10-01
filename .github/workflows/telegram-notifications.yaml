@@ -8,6 +8,7 @@ on:
       - Show GitHub workspace
       - Terraform module checks
       - Terraform live deployment
+      - Deploy Resume Site
     types:
       - completed
 
@@ -153,6 +154,22 @@ jobs:
             echo "::warning::Could not read the job list. Sending the message without job details."
           fi
 
+          # Website: only runs that upload a deployment-info artifact (Deploy Resume Site) have one.
+          site_line=""
+          deployment_dir="${RUNNER_TEMP}/deployment-info"
+          if gh run download "${RUN_ID}" \
+            --repo "${REPOSITORY}" \
+            --name deployment-info \
+            --dir "${deployment_dir}" >/dev/null 2>&1; then
+            website_url="$(head -n 1 "${deployment_dir}/website-url.txt" 2>/dev/null || true)"
+            if [[ "${website_url}" =~ ^https://[a-z0-9.-]+\.cloudfront\.net/?$ ]]; then
+              website_url_html="$(escape_html "${website_url}")"
+              site_line="🌐 <a href=\"${website_url_html}\">${website_url_html}</a>"
+            else
+              echo "::warning::deployment-info artifact has no valid CloudFront URL. Sending the message without it."
+            fi
+          fi
+
           # Links row.
           links="<a href=\"$(escape_html "${WORKFLOW_URL}")\">Run</a> · <a href=\"$(escape_html "${commit_url}")\">Commit</a>"
           if [[ -n "${PR_NUMBER}" ]]; then
@@ -160,6 +177,9 @@ jobs:
           fi
 
           lines=("${header}" "${meta}" "" "${commit_line}")
+          if [[ -n "${site_line}" ]]; then
+            lines+=("${site_line}")
+          fi
           if (( ${#job_lines[@]} > 0 )); then
             lines+=("" "<b>Jobs</b>" "${job_lines[@]}")
           fi
