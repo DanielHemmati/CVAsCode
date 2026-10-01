@@ -1,4 +1,4 @@
-// Fill in job durations (e.g. "1 yr 9 mos") from each date's data-start/data-end.
+// Fill in job and education durations (e.g. "1 yr 9 mos") from each date's data-start/data-end.
 // The count is inclusive of both months, like LinkedIn.
 function formatDuration(start, end) {
   const [sy, sm] = start.split("-").map(Number);
@@ -12,7 +12,7 @@ function formatDuration(start, end) {
   return parts.join(" ");
 }
 
-document.querySelectorAll(".job").forEach((job) => {
+document.querySelectorAll(".job, .edu").forEach((job) => {
   const date = job.querySelector(".date[data-start][data-end]");
   const slot = job.querySelector(".duration");
   if (date && slot) {
