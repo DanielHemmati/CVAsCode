@@ -58,6 +58,63 @@ resource "aws_cloudfront_origin_access_control" "website" {
   signing_protocol                  = "sigv4"
 }
 
+resource "aws_cloudfront_response_headers_policy" "website" {
+  name = "${var.bucket_name}-security-headers"
+
+  security_headers_config {
+    # INFO: this can be way more complicated which is highly depend onf the kind
+    # of application you are building
+    content_security_policy {
+      content_security_policy = join(" ", [
+        "default-src 'self';",
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;",
+        "font-src https://fonts.gstatic.com;",
+        "img-src 'self' data:;",
+        "connect-src 'self' https://*.execute-api.us-east-1.amazonaws.com;",
+        "object-src 'none';",
+        "frame-ancestors 'none';",
+      ])
+      override = true
+    }
+
+    # aws s3 sync sets each object's Content-Type; this prevents browsers from guessing a different type.
+    content_type_options {
+      override = true
+    }
+
+    # This adds the HTTP header X-Frame-Options: DENY. It prevents any website from displaying your resume inside an <iframe>,
+    # which reduces clickjacking attacks. override = true tells CloudFront to replace the header if S3 already supplies one.
+    # It overlaps with frame-ancestors 'none' in the CSP, but supports older browsers that do not understand that CSP rule.
+    # Block iframe embedding to reduce clickjacking.
+    frame_options {
+      frame_option = "DENY"
+      override     = true
+    }
+
+    # https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Referrer-Policy#strict-origin-when-cross-origin_2
+    referrer_policy {
+      referrer_policy = "strict-origin-when-cross-origin"
+      override        = true
+    }
+
+    strict_transport_security {
+      access_control_max_age_sec = 63072000
+      include_subdomains         = false
+      preload                    = false
+      override                   = true
+    }
+  }
+
+  # Though not necessary it's just fun to have it :)
+  custom_headers_config {
+    items {
+      header   = "Permissions-Policy"
+      value    = "camera=(), microphone=(), geolocation=()"
+      override = true
+    }
+  }
+}
+
 resource "aws_cloudfront_distribution" "website" {
   enabled             = true
   is_ipv6_enabled     = true
@@ -72,12 +129,13 @@ resource "aws_cloudfront_distribution" "website" {
   }
 
   default_cache_behavior {
-    target_origin_id       = "s3-${aws_s3_bucket.website.id}"
-    viewer_protocol_policy = "redirect-to-https"
-    allowed_methods        = ["GET", "HEAD"]
-    cached_methods         = ["GET", "HEAD"]
-    cache_policy_id        = data.aws_cloudfront_cache_policy.caching_optimized.id
-    compress               = true
+    target_origin_id           = "s3-${aws_s3_bucket.website.id}"
+    viewer_protocol_policy     = "redirect-to-https"
+    allowed_methods            = ["GET", "HEAD"]
+    cached_methods             = ["GET", "HEAD"]
+    cache_policy_id            = data.aws_cloudfront_cache_policy.caching_optimized.id
+    response_headers_policy_id = aws_cloudfront_response_headers_policy.website.id
+    compress                   = true
   }
 
   restrictions {
