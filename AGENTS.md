@@ -27,7 +27,7 @@ The project should demonstrate production-grade AWS infrastructure, multi-accoun
   - Production account
 - S3 for static site hosting assets.
 - CloudFront for CDN, TLS, caching, and global delivery.
-- Route 53 for DNS.
+- Route 53 for DNS (currently not possible b/c our aws account is fresh)
 - ACM for certificates.
 - Lambda for serverless backend logic.
 - API Gateway for public API endpoints.
