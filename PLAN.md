@@ -15,6 +15,14 @@ The project should demonstrate production-grade AWS infrastructure, secure ident
 - Keep the design scalable enough to explain how a simple static site could grow to millions of users.
 - Add at least one feature beyond the standard resume challenge, such as analytics, visitor history, dynamic profile data, a contact workflow, or an authenticated admin area.
 
+## Implementation Documents
+
+`PLAN.md` defines the high-level objectives and milestones for the project.
+
+The `docs/` directory contains the step-by-step implementation plan for each phase. Name each document with a three-digit sequence number and a short topic, such as `001-cf-logging.md`.
+
+The current implementation document is [`docs/001-cf-logging.md`](docs/001-cf-logging.md).
+
 ## Target AWS Architecture
 
 - IAM Identity Center for human access.
@@ -71,54 +79,6 @@ terraform/modules/
 Each Terraform root module should usually contain `main.tf`, `variables.tf`, `outputs.tf`, `providers.tf`, and `backend.tf`. Use small focused live stacks and avoid one large Terraform state for the whole platform.
 
 This project is temporary and will be destroyed with Terraform. Project-owned data buckets, including CloudFront access-log and Athena query-results buckets, should set `force_destroy = true` so their objects do not block teardown. Do not apply this rule to Terraform state buckets unless a separate, reviewed teardown process protects the state needed to destroy the remaining infrastructure.
-
-## Milestones
-
-1. Repository baseline
-   - Finalize folder structure.
-   - Add tooling docs.
-   - Add local development commands.
-
-2. Terraform foundation
-   - Configure providers.
-   - Add remote state approach.
-   - Add naming and tagging conventions.
-
-3. AWS organization and identity
-   - Define account layout.
-   - Configure IAM Identity Center.
-   - Define permission sets.
-   - Add initial guardrails.
-
-4. Static resume delivery
-   - Build S3, CloudFront, Route 53, and ACM modules.
-   - Deploy `index.html`.
-   - Add cache and TLS configuration.
-
-5. Backend feature
-   - Add API Gateway, Lambda, and DynamoDB.
-   - Wire frontend to the API.
-   - Add tests and observability.
-
-6. Testing and policy
-   - Add TFLint.
-   - Add Trivy.
-   - Add Infracost.
-   - Add OPA/Rego or selected alternative.
-   - Add Terraform tests and Terratest where useful.
-
-7. CI/CD
-   - Add pull request checks.
-   - Add plan workflow.
-   - Add deployment workflow.
-   - Add production approval gate.
-
-8. Production readiness
-   - Add alarms.
-   - Add cost budgets.
-   - Add security documentation.
-   - Add architecture diagram.
-   - Add final README walkthrough.
 
 ## Definition of Done
 

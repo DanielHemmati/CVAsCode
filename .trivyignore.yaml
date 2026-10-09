@@ -23,3 +23,13 @@ misconfigurations:
     paths:
       - "**/globals/plan-artifacts/main.tf"
     statement: Private Terraform plan files use SSE-S3 because a customer-managed KMS key is not required for this project.
+
+  - id: AVD-AWS-0089
+    paths:
+      - "**/cloudfront-logging/main.tf"
+    statement: This bucket stores CloudFront access logs, so separate S3 access logging is not required.
+
+  - id: AVD-AWS-0132
+    paths:
+      - "**/cloudfront-logging/main.tf"
+    statement: CloudFront access logs use the approved SSE-S3 encryption instead of a customer-managed KMS key.

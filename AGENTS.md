@@ -11,6 +11,7 @@
 - Follow AWS Well-Architected Framework principles.
 - Do not use em dashes in AWS resource names or descriptions. Use hyphens instead.
 - Do not store or expose secrets, credentials, API keys, tokens, or passwords.
+- Anything related to trivyignore should go to `.trivyignore.yaml` file
 
 ## Required Skills
 
