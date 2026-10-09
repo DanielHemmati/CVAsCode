@@ -2,7 +2,9 @@
 
 This module will deliver CloudFront standard logging v2 records to Amazon S3 and expose them to Athena through the Glue Data Catalog.
 
-Phase 7 uses the current AWS principal for Athena access. The module does not create or change IAM resources.
+Phase 8 adds nine saved Athena queries for common CloudFront access-log reports. Each query reads one projected day by default.
+
+The module uses the current AWS principal for Athena access. It does not create or change IAM resources.
 
 <!-- BEGIN_TF_DOCS -->
 ## Requirements
@@ -16,6 +18,7 @@ Phase 7 uses the current AWS principal for Athena access. The module does not cr
 
 | Name | Type |
 | ---- | ---- |
+| [aws_athena_named_query.cloudfront_access_logs](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/athena_named_query) | resource |
 | [aws_athena_workgroup.cloudfront_access_logs](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/athena_workgroup) | resource |
 | [aws_cloudwatch_log_delivery.cloudfront_access_logs](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudwatch_log_delivery) | resource |
 | [aws_cloudwatch_log_delivery_destination.cloudfront_access_logs](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudwatch_log_delivery_destination) | resource |

@@ -7,8 +7,8 @@ variable "cloudfront_distribution_id" {
   nullable    = false
 
   validation {
-    condition     = length(trimspace(var.cloudfront_distribution_id)) > 0
-    error_message = "cloudfront_distribution_id must not be empty."
+    condition     = can(regex("^[A-Z0-9]+$", var.cloudfront_distribution_id))
+    error_message = "cloudfront_distribution_id must contain only uppercase letters and numbers."
   }
 }
 
@@ -181,6 +181,21 @@ variable "record_fields" {
   validation {
     condition     = !contains(var.record_fields, "cs(Cookie)")
     error_message = "record_fields must not include cs(Cookie)."
+  }
+
+  validation {
+    condition = length(setsubtract(toset([
+      "timestamp(ms)",
+      "cs-uri-stem",
+      "sc-status",
+      "sc-bytes",
+      "time-taken",
+      "cs(Referer)",
+      "cs(User-Agent)",
+      "x-edge-result-type",
+      "c-country",
+    ]), toset(var.record_fields))) == 0
+    error_message = "record_fields must include every field used by the Athena named queries."
   }
 
   validation {
