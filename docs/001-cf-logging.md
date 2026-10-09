@@ -176,7 +176,7 @@ After apply, generate website requests. CloudFront can take up to 12 hours to de
 
 Phase 3 is complete when one JSON object appears under the expected Hive path.
 
-## Phase 4: Glue Table and Partition Projection
+## Phase 4: Glue Table and Partition Projection ✅
 
 Create only:
 

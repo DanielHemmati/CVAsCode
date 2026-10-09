@@ -2,7 +2,7 @@
 
 This module will deliver CloudFront standard logging v2 records to Amazon S3 and expose them to Athena through the Glue Data Catalog.
 
-Phase 3 connects the CloudFront distribution to the access-log bucket. It uses standard logging v2 with JSON records and Hive-compatible paths.
+Phase 4 adds an external Glue table for the JSON records. Athena uses partition projection to read Hive-compatible paths without stored partitions or a Glue crawler.
 
 <!-- BEGIN_TF_DOCS -->
 ## Requirements
@@ -19,6 +19,8 @@ Phase 3 connects the CloudFront distribution to the access-log bucket. It uses s
 | [aws_cloudwatch_log_delivery.cloudfront_access_logs](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudwatch_log_delivery) | resource |
 | [aws_cloudwatch_log_delivery_destination.cloudfront_access_logs](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudwatch_log_delivery_destination) | resource |
 | [aws_cloudwatch_log_delivery_source.cloudfront_access_logs](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudwatch_log_delivery_source) | resource |
+| [aws_glue_catalog_database.cloudfront_access_logs](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/glue_catalog_database) | resource |
+| [aws_glue_catalog_table.cloudfront_access_logs](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/glue_catalog_table) | resource |
 | [aws_s3_bucket.access_logs](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/s3_bucket) | resource |
 | [aws_s3_bucket_lifecycle_configuration.access_logs](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/s3_bucket_lifecycle_configuration) | resource |
 | [aws_s3_bucket_ownership_controls.access_logs](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/s3_bucket_ownership_controls) | resource |
@@ -55,4 +57,6 @@ Phase 3 connects the CloudFront distribution to the access-log bucket. It uses s
 | ---- | ----------- |
 | <a name="output_access_log_bucket_arn"></a> [access\_log\_bucket\_arn](#output\_access\_log\_bucket\_arn) | ARN of the S3 bucket that stores CloudFront access logs. |
 | <a name="output_access_log_bucket_name"></a> [access\_log\_bucket\_name](#output\_access\_log\_bucket\_name) | Name of the S3 bucket that stores CloudFront access logs. |
+| <a name="output_glue_database_name"></a> [glue\_database\_name](#output\_glue\_database\_name) | Name of the Glue Data Catalog database for CloudFront access logs. |
+| <a name="output_glue_table_name"></a> [glue\_table\_name](#output\_glue\_table\_name) | Name of the Glue Data Catalog table for CloudFront access logs. |
 <!-- END_TF_DOCS -->

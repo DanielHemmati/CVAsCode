@@ -3,6 +3,33 @@ locals {
   delivery_source_name      = "cloudfront-${var.cloudfront_distribution_id}"
   delivery_source_arn       = "arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:delivery-source:${local.delivery_source_name}"
 
+  record_field_columns = {
+    "date"                        = "event_date"
+    "time"                        = "event_time"
+    "timestamp(ms)"               = "timestamp_ms"
+    "x-edge-location"             = "x_edge_location"
+    "c-ip"                        = "c_ip"
+    "cs-method"                   = "cs_method"
+    "cs(Host)"                    = "cs_host"
+    "cs-uri-stem"                 = "cs_uri_stem"
+    "cs-uri-query"                = "cs_uri_query"
+    "sc-status"                   = "sc_status"
+    "sc-bytes"                    = "sc_bytes"
+    "cs-bytes"                    = "cs_bytes"
+    "time-taken"                  = "time_taken"
+    "time-to-first-byte"          = "time_to_first_byte"
+    "cs(Referer)"                 = "cs_referer"
+    "cs(User-Agent)"              = "cs_user_agent"
+    "x-edge-result-type"          = "x_edge_result_type"
+    "x-edge-response-result-type" = "x_edge_response_result_type"
+    "x-edge-detailed-result-type" = "x_edge_detailed_result_type"
+    "x-edge-request-id"           = "x_edge_request_id"
+    "ssl-protocol"                = "ssl_protocol"
+    "ssl-cipher"                  = "ssl_cipher"
+    "c-country"                   = "c_country"
+    "cache-behavior-path-pattern" = "cache_behavior_path_pattern"
+  }
+
   access_log_bucket_tags = merge(var.tags, {
     Name = var.access_log_bucket_name
   })
@@ -100,4 +127,86 @@ resource "aws_cloudwatch_log_delivery" "cloudfront_access_logs" {
   }]
 
   tags = var.tags
+}
+
+resource "aws_glue_catalog_database" "cloudfront_access_logs" {
+  name = var.glue_database_name
+
+  tags = var.tags
+}
+
+resource "aws_glue_catalog_table" "cloudfront_access_logs" {
+  name          = var.glue_table_name
+  database_name = aws_glue_catalog_database.cloudfront_access_logs.name
+  table_type    = "EXTERNAL_TABLE"
+
+  // https://docs.aws.amazon.com/athena/latest/ug/partition-projection-supported-types.html
+  parameters = {
+    "EXTERNAL"                         = "TRUE" // enable partition projection
+    "projection.enabled"               = "true"
+    "projection.distributionid.type"   = "enum"
+    "projection.distributionid.values" = var.cloudfront_distribution_id
+    "projection.year.type"             = "integer"
+    "projection.year.range"            = "${var.partition_projection_start_year},${var.partition_projection_end_year}"
+    "projection.year.digits"           = "4"
+    "projection.month.type"            = "integer"
+    "projection.month.range"           = "1,12"
+    "projection.month.digits"          = "2"
+    "projection.day.type"              = "integer"
+    "projection.day.range"             = "1,31"
+    "projection.day.digits"            = "2"
+    "projection.hour.type"             = "integer"
+    "projection.hour.range"            = "0,23"
+    "projection.hour.digits"           = "2"
+    "storage.location.template"        = "s3://${aws_s3_bucket.access_logs.id}/cloudfront/distributionid=$${distributionid}/year=$${year}/month=$${month}/day=$${day}/hour=$${hour}/"
+  }
+
+  partition_keys {
+    name = "distributionid"
+    type = "string"
+  }
+
+  partition_keys {
+    name = "year"
+    type = "string"
+  }
+
+  partition_keys {
+    name = "month"
+    type = "string"
+  }
+
+  partition_keys {
+    name = "day"
+    type = "string"
+  }
+
+  partition_keys {
+    name = "hour"
+    type = "string"
+  }
+
+  storage_descriptor {
+    location      = "s3://${aws_s3_bucket.access_logs.id}/cloudfront/"
+    input_format  = "org.apache.hadoop.mapred.TextInputFormat"
+    output_format = "org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat"
+
+    dynamic "columns" {
+      for_each = var.record_fields
+
+      content {
+        name = local.record_field_columns[columns.value]
+        type = "string"
+      }
+    }
+
+    ser_de_info {
+      serialization_library = "org.openx.data.jsonserde.JsonSerDe"
+
+      parameters = {
+        for record_field in var.record_fields :
+        "mapping.${local.record_field_columns[record_field]}" => record_field
+      }
+    }
+  }
 }

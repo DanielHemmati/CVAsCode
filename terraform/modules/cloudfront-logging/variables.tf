@@ -180,6 +180,36 @@ variable "record_fields" {
     condition     = !contains(var.record_fields, "cs(Cookie)")
     error_message = "record_fields must not include cs(Cookie)."
   }
+
+  validation {
+    condition = length(setsubtract(toset(var.record_fields), toset([
+      "date",
+      "time",
+      "timestamp(ms)",
+      "x-edge-location",
+      "c-ip",
+      "cs-method",
+      "cs(Host)",
+      "cs-uri-stem",
+      "cs-uri-query",
+      "sc-status",
+      "sc-bytes",
+      "cs-bytes",
+      "time-taken",
+      "time-to-first-byte",
+      "cs(Referer)",
+      "cs(User-Agent)",
+      "x-edge-result-type",
+      "x-edge-response-result-type",
+      "x-edge-detailed-result-type",
+      "x-edge-request-id",
+      "ssl-protocol",
+      "ssl-cipher",
+      "c-country",
+      "cache-behavior-path-pattern",
+    ]))) == 0
+    error_message = "record_fields must contain only approved CloudFront access-log fields."
+  }
 }
 
 variable "tags" {
