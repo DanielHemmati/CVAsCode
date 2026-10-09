@@ -60,6 +60,7 @@ For each phase:
 3. Create a saved plan when the phase adds resources.
 4. Show the code diff and plan to the project owner.
 5. Wait for approval before starting the next phase.
+6. after you are finished with each phase add ✅ in front of them
 
 Review each phase before it reaches `main`. CI applies a successful saved plan automatically on `main`.
 
@@ -195,31 +196,31 @@ output_format = org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
 
 Map the CloudFront JSON fields to these SQL-safe string columns:
 
-| Athena column | JSON field |
-| --- | --- |
-| `event_date` | `date` |
-| `event_time` | `time` |
-| `timestamp_ms` | `timestamp(ms)` |
-| `x_edge_location` | `x-edge-location` |
-| `c_ip` | `c-ip` |
-| `cs_method` | `cs-method` |
-| `cs_host` | `cs(Host)` |
-| `cs_uri_stem` | `cs-uri-stem` |
-| `cs_uri_query` | `cs-uri-query` |
-| `sc_status` | `sc-status` |
-| `sc_bytes` | `sc-bytes` |
-| `cs_bytes` | `cs-bytes` |
-| `time_taken` | `time-taken` |
-| `time_to_first_byte` | `time-to-first-byte` |
-| `cs_referer` | `cs(Referer)` |
-| `cs_user_agent` | `cs(User-Agent)` |
-| `x_edge_result_type` | `x-edge-result-type` |
+| Athena column                 | JSON field                    |
+| ----------------------------- | ----------------------------- |
+| `event_date`                  | `date`                        |
+| `event_time`                  | `time`                        |
+| `timestamp_ms`                | `timestamp(ms)`               |
+| `x_edge_location`             | `x-edge-location`             |
+| `c_ip`                        | `c-ip`                        |
+| `cs_method`                   | `cs-method`                   |
+| `cs_host`                     | `cs(Host)`                    |
+| `cs_uri_stem`                 | `cs-uri-stem`                 |
+| `cs_uri_query`                | `cs-uri-query`                |
+| `sc_status`                   | `sc-status`                   |
+| `sc_bytes`                    | `sc-bytes`                    |
+| `cs_bytes`                    | `cs-bytes`                    |
+| `time_taken`                  | `time-taken`                  |
+| `time_to_first_byte`          | `time-to-first-byte`          |
+| `cs_referer`                  | `cs(Referer)`                 |
+| `cs_user_agent`               | `cs(User-Agent)`              |
+| `x_edge_result_type`          | `x-edge-result-type`          |
 | `x_edge_response_result_type` | `x-edge-response-result-type` |
 | `x_edge_detailed_result_type` | `x-edge-detailed-result-type` |
-| `x_edge_request_id` | `x-edge-request-id` |
-| `ssl_protocol` | `ssl-protocol` |
-| `ssl_cipher` | `ssl-cipher` |
-| `c_country` | `c-country` |
+| `x_edge_request_id`           | `x-edge-request-id`           |
+| `ssl_protocol`                | `ssl-protocol`                |
+| `ssl_cipher`                  | `ssl-cipher`                  |
+| `c_country`                   | `c-country`                   |
 | `cache_behavior_path_pattern` | `cache-behavior-path-pattern` |
 
 Keep every data column as `string`. CloudFront can use `-` for unavailable values. Queries must use `TRY_CAST` for numeric operations.
