@@ -18,6 +18,16 @@ output "athena_results_bucket_name" {
   value       = module.cloudfront_logging.athena_results_bucket_name
 }
 
+output "athena_workgroup_arn" {
+  description = "ARN of the Athena workgroup for CloudFront access-log queries."
+  value       = module.cloudfront_logging.athena_workgroup_arn
+}
+
+output "athena_workgroup_name" {
+  description = "Name of the Athena workgroup for CloudFront access-log queries."
+  value       = module.cloudfront_logging.athena_workgroup_name
+}
+
 output "glue_database_name" {
   description = "Name of the Glue Data Catalog database for CloudFront access logs."
   value       = module.cloudfront_logging.glue_database_name

@@ -2,4 +2,4 @@
 
 This root module will deploy CloudFront logging and Athena analytics resources in the production AWS account.
 
-Phase 5 adds a private S3 bucket for Athena query results. A lifecycle rule deletes results and incomplete multipart uploads after seven days.
+Phase 6 adds an Athena workgroup with enforced query settings. The workgroup writes encrypted results to the dedicated results bucket and limits each query to 100 MiB.

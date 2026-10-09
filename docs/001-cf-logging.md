@@ -262,7 +262,7 @@ Review gate:
 - Every selected delivery field has one SerDe mapping.
 - The projection template matches the S3 delivery path.
 
-## Phase 5: Athena Results Bucket
+## Phase 5: Athena Results Bucket ✅
 
 Create only the Athena-results bucket and its controls:
 
@@ -282,7 +282,7 @@ Review gate:
 - The bucket is private and separate from the log path.
 - The bucket has no CloudFront delivery permissions.
 
-## Phase 6: Athena Workgroup
+## Phase 6: Athena Workgroup ✅
 
 Create only the Athena workgroup. Configure:
 

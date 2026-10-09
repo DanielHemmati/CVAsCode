@@ -104,10 +104,12 @@ variable "athena_result_retention_days" {
   }
 }
 
+# athena query do occur cost, in order to control that we can speicify how much
+# data atehna can query
 variable "athena_bytes_scanned_cutoff" {
   description = "Maximum number of bytes that one Athena query can scan."
   type        = number
-  default     = 104857600
+  default     = 104857600 # 100 MiB
   nullable    = false
 
   validation {

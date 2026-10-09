@@ -2,7 +2,7 @@
 
 This module will deliver CloudFront standard logging v2 records to Amazon S3 and expose them to Athena through the Glue Data Catalog.
 
-Phase 5 adds a private S3 bucket for Athena query results. A lifecycle rule deletes results and incomplete multipart uploads after seven days.
+Phase 6 adds an Athena workgroup with enforced query settings. The workgroup writes encrypted results to the dedicated results bucket and limits each query to 100 MiB.
 
 <!-- BEGIN_TF_DOCS -->
 ## Requirements
@@ -16,6 +16,7 @@ Phase 5 adds a private S3 bucket for Athena query results. A lifecycle rule dele
 
 | Name | Type |
 | ---- | ---- |
+| [aws_athena_workgroup.cloudfront_access_logs](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/athena_workgroup) | resource |
 | [aws_cloudwatch_log_delivery.cloudfront_access_logs](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudwatch_log_delivery) | resource |
 | [aws_cloudwatch_log_delivery_destination.cloudfront_access_logs](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudwatch_log_delivery_destination) | resource |
 | [aws_cloudwatch_log_delivery_source.cloudfront_access_logs](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudwatch_log_delivery_source) | resource |
@@ -66,6 +67,8 @@ Phase 5 adds a private S3 bucket for Athena query results. A lifecycle rule dele
 | <a name="output_access_log_bucket_name"></a> [access\_log\_bucket\_name](#output\_access\_log\_bucket\_name) | Name of the S3 bucket that stores CloudFront access logs. |
 | <a name="output_athena_results_bucket_arn"></a> [athena\_results\_bucket\_arn](#output\_athena\_results\_bucket\_arn) | ARN of the S3 bucket that stores Athena query results. |
 | <a name="output_athena_results_bucket_name"></a> [athena\_results\_bucket\_name](#output\_athena\_results\_bucket\_name) | Name of the S3 bucket that stores Athena query results. |
+| <a name="output_athena_workgroup_arn"></a> [athena\_workgroup\_arn](#output\_athena\_workgroup\_arn) | ARN of the Athena workgroup for CloudFront access-log queries. |
+| <a name="output_athena_workgroup_name"></a> [athena\_workgroup\_name](#output\_athena\_workgroup\_name) | Name of the Athena workgroup for CloudFront access-log queries. |
 | <a name="output_glue_database_name"></a> [glue\_database\_name](#output\_glue\_database\_name) | Name of the Glue Data Catalog database for CloudFront access logs. |
 | <a name="output_glue_table_name"></a> [glue\_table\_name](#output\_glue\_table\_name) | Name of the Glue Data Catalog table for CloudFront access logs. |
 <!-- END_TF_DOCS -->
