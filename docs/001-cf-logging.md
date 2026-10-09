@@ -300,7 +300,7 @@ Review gate:
 - The result location is not shared or default.
 - No named queries exist yet.
 
-## Phase 7: Current Principal Access
+## Phase 7: Current Principal Access ✅
 
 Use the existing AWS principal returned by `data.aws_caller_identity.current`. Do not create an IAM user, role, group, policy, or policy attachment.
 

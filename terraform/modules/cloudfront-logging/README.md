@@ -2,7 +2,7 @@
 
 This module will deliver CloudFront standard logging v2 records to Amazon S3 and expose them to Athena through the Glue Data Catalog.
 
-Phase 6 adds an Athena workgroup with enforced query settings. The workgroup writes encrypted results to the dedicated results bucket and limits each query to 100 MiB.
+Phase 7 uses the current AWS principal for Athena access. The module does not create or change IAM resources.
 
 <!-- BEGIN_TF_DOCS -->
 ## Requirements
