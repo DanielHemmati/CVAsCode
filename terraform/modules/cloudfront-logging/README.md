@@ -2,7 +2,7 @@
 
 This module will deliver CloudFront standard logging v2 records to Amazon S3 and expose them to Athena through the Glue Data Catalog.
 
-Phase 2 creates the private S3 bucket that stores CloudFront access logs. Later phases add log delivery and Athena resources.
+Phase 3 connects the CloudFront distribution to the access-log bucket. It uses standard logging v2 with JSON records and Hive-compatible paths.
 
 <!-- BEGIN_TF_DOCS -->
 ## Requirements
@@ -16,6 +16,9 @@ Phase 2 creates the private S3 bucket that stores CloudFront access logs. Later 
 
 | Name | Type |
 | ---- | ---- |
+| [aws_cloudwatch_log_delivery.cloudfront_access_logs](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudwatch_log_delivery) | resource |
+| [aws_cloudwatch_log_delivery_destination.cloudfront_access_logs](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudwatch_log_delivery_destination) | resource |
+| [aws_cloudwatch_log_delivery_source.cloudfront_access_logs](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudwatch_log_delivery_source) | resource |
 | [aws_s3_bucket.access_logs](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/s3_bucket) | resource |
 | [aws_s3_bucket_lifecycle_configuration.access_logs](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/s3_bucket_lifecycle_configuration) | resource |
 | [aws_s3_bucket_ownership_controls.access_logs](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/s3_bucket_ownership_controls) | resource |

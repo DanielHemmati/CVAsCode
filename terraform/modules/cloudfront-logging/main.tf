@@ -1,6 +1,7 @@
 locals {
-  delivery_source_name = "cloudfront-${var.cloudfront_distribution_id}"
-  delivery_source_arn  = "arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:delivery-source:${local.delivery_source_name}"
+  delivery_destination_name = "cloudfront-${var.cloudfront_distribution_id}-s3"
+  delivery_source_name      = "cloudfront-${var.cloudfront_distribution_id}"
+  delivery_source_arn       = "arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:delivery-source:${local.delivery_source_name}"
 
   access_log_bucket_tags = merge(var.tags, {
     Name = var.access_log_bucket_name
@@ -65,4 +66,38 @@ resource "aws_s3_bucket_policy" "access_logs" {
   policy = data.aws_iam_policy_document.access_logs.json
 
   depends_on = [aws_s3_bucket_public_access_block.access_logs]
+}
+
+resource "aws_cloudwatch_log_delivery_destination" "cloudfront_access_logs" {
+  name          = local.delivery_destination_name
+  output_format = "json"
+
+  delivery_destination_configuration {
+    destination_resource_arn = "${aws_s3_bucket.access_logs.arn}/cloudfront"
+  }
+
+  tags = var.tags
+
+  depends_on = [aws_s3_bucket_policy.access_logs]
+}
+
+resource "aws_cloudwatch_log_delivery_source" "cloudfront_access_logs" {
+  name         = local.delivery_source_name
+  log_type     = "ACCESS_LOGS"
+  resource_arn = var.cloudfront_distribution_arn
+
+  tags = var.tags
+}
+
+resource "aws_cloudwatch_log_delivery" "cloudfront_access_logs" {
+  delivery_destination_arn = aws_cloudwatch_log_delivery_destination.cloudfront_access_logs.arn
+  delivery_source_name     = aws_cloudwatch_log_delivery_source.cloudfront_access_logs.name
+  record_fields            = var.record_fields
+
+  s3_delivery_configuration = [{
+    enable_hive_compatible_path = true
+    suffix_path                 = "{distributionid}/{yyyy}/{MM}/{dd}/{HH}"
+  }]
+
+  tags = var.tags
 }
