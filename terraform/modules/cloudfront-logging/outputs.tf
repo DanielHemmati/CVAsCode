@@ -8,6 +8,16 @@ output "access_log_bucket_name" {
   value       = aws_s3_bucket.access_logs.id
 }
 
+output "athena_results_bucket_arn" {
+  description = "ARN of the S3 bucket that stores Athena query results."
+  value       = aws_s3_bucket.athena_results.arn
+}
+
+output "athena_results_bucket_name" {
+  description = "Name of the S3 bucket that stores Athena query results."
+  value       = aws_s3_bucket.athena_results.id
+}
+
 output "glue_database_name" {
   description = "Name of the Glue Data Catalog database for CloudFront access logs."
   value       = aws_glue_catalog_database.cloudfront_access_logs.name

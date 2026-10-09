@@ -33,3 +33,13 @@ misconfigurations:
     paths:
       - "**/cloudfront-logging/main.tf"
     statement: CloudFront access logs use the approved SSE-S3 encryption instead of a customer-managed KMS key.
+
+  - id: AVD-AWS-0089
+    paths:
+      - "**/cloudfront-logging/athena-results.tf"
+    statement: This private results bucket omits S3 access logging to avoid a second log pipeline for temporary query output.
+
+  - id: AVD-AWS-0132
+    paths:
+      - "**/cloudfront-logging/athena-results.tf"
+    statement: Athena query results use the approved SSE-S3 encryption instead of a customer-managed KMS key.
