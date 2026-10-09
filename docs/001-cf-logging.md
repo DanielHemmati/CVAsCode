@@ -116,7 +116,7 @@ Review gate:
 - The bucket is private and encrypted.
 - The delivery principal can write only to `cloudfront/*`.
 
-## Phase 3: CloudFront Log Delivery
+## Phase 3: CloudFront Log Delivery ✅
 
 Before planning, run the read-only delivery-source check. Stop if the distribution already has a source.
 
