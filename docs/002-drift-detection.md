@@ -70,7 +70,8 @@ terraform -chdir="${stack_path}" plan \
   -input=false \
   -lock-timeout=5m \
   -no-color \
-  -refresh-only
+  -refresh-only \
+  -out="${temporary_plan_file}"
 ```
 
 `-refresh-only` compares the remote resources with the current Terraform state. It does not propose configuration changes from the repository.
@@ -78,19 +79,23 @@ terraform -chdir="${stack_path}" plan \
 Interpret the exit codes as follows:
 
 - Exit code `0`: No drift.
-- Exit code `2`: Drift found.
+- Exit code `2`: Inspect the saved plan for managed resource drift.
 - Any other exit code: Detection error.
 
 Do not use `set -e` around the plan command. Capture its exit code so that code `2` does not stop the scan.
 
+For exit code `2`, read the temporary plan with `terraform show -json`. Report drift only when `resource_drift` contains a managed resource with a non-no-op action.
+
+Treat root-output refreshes without managed resource drift as `NO_DRIFT`. Delete the temporary binary plan and JSON file after inspection.
+
 ## Result Handling
 
-Store only a short status for each root. Do not print or upload the full plan because it can contain resource data.
+Store only a short status and up to ten changed resource addresses for each root. Do not print or upload plan values because they can contain resource data.
 
 Use these final states:
 
-- `NO_DRIFT` when every root returns exit code `0`.
-- `DRIFT_FOUND` when one or more roots return exit code `2` and none return an error.
+- `NO_DRIFT` when no managed resource has drift.
+- `DRIFT_FOUND` when one or more managed resources have drift and no root returns an error.
 - `ERROR` when initialization or planning fails for any root.
 
 List the affected root names in the job summary and Telegram message. Include the repository, run number, commit SHA, UTC time, and workflow URL.

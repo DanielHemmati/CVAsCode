@@ -68,8 +68,11 @@ jobs:
             for backend_file in "${backend_files[@]}"; do
               stack_path="${backend_file%/backend.tf}"
               stack_name="${stack_path#terraform/live/}"
-              init_output="${RUNNER_TEMP}/terraform-init-${RANDOM}.txt"
-              plan_output="${RUNNER_TEMP}/terraform-plan-${RANDOM}.txt"
+              work_dir="$(mktemp -d "${RUNNER_TEMP}/drift-plan.XXXXXX")"
+              init_output="${work_dir}/init.txt"
+              plan_output="${work_dir}/plan.txt"
+              plan_file="${work_dir}/terraform.tfplan"
+              plan_json="${work_dir}/terraform.json"
 
               echo "Scanning ${stack_name}."
 
@@ -78,9 +81,14 @@ jobs:
                 -lockfile=readonly \
                 > "${init_output}" 2>&1; then
                 echo "::error title=Terraform initialization failed::${stack_name}"
-                printf '%s\t%s\n' "${stack_name}" "ERROR" >> "${results_file}"
+                printf '%s\t%s\t%s\n' \
+                  "${stack_name}" \
+                  "ERROR" \
+                  "Initialization failed" \
+                  >> "${results_file}"
                 found_error=true
-                rm -f "${init_output}" "${plan_output}"
+                rm -f "${init_output}" "${plan_output}" "${plan_file}" "${plan_json}"
+                rmdir "${work_dir}"
                 continue
               fi
               rm -f "${init_output}"
@@ -91,30 +99,81 @@ jobs:
                 -lock-timeout=5m \
                 -no-color \
                 -refresh-only \
+                -out="${plan_file}" \
                 > "${plan_output}" 2>&1; then
                 plan_exit_code=0
               else
                 plan_exit_code=$?
               fi
-              rm -f "${plan_output}"
 
               case "${plan_exit_code}" in
                 0)
                   stack_status="NO_DRIFT"
+                  stack_details="-"
                   ;;
                 2)
-                  stack_status="DRIFT_FOUND"
-                  found_drift=true
-                  echo "::warning title=Terraform drift found::${stack_name}"
+                  if ! terraform -chdir="${stack_path}" show \
+                    -json \
+                    "${plan_file}" \
+                    > "${plan_json}" 2> /dev/null; then
+                    stack_status="ERROR"
+                    stack_details="Plan inspection failed"
+                    found_error=true
+                    echo "::error title=Terraform plan inspection failed::${stack_name}"
+                  elif ! drift_count="$(
+                    jq -er '
+                      [
+                        .resource_drift[]?
+                        | select(.mode == "managed")
+                        | select(.change.actions != ["no-op"])
+                      ]
+                      | length
+                    ' "${plan_json}"
+                  )"; then
+                    stack_status="ERROR"
+                    stack_details="Plan JSON inspection failed"
+                    found_error=true
+                    echo "::error title=Terraform plan JSON inspection failed::${stack_name}"
+                  elif (( drift_count > 0 )); then
+                    stack_status="DRIFT_FOUND"
+                    found_drift=true
+                    stack_details="$(
+                      jq -r '
+                        [
+                          .resource_drift[]?
+                          | select(.mode == "managed")
+                          | select(.change.actions != ["no-op"])
+                          | "\(.address) (\(.change.actions | join(" -> ")))"
+                        ][0:10]
+                        | join(", ")
+                      ' "${plan_json}"
+                    )"
+                    if (( drift_count > 10 )); then
+                      stack_details+=", and $(( drift_count - 10 )) more"
+                    fi
+                    echo "::warning title=Terraform drift found::${stack_name}: ${stack_details}"
+                  else
+                    # Exit code 2 can contain root-output refreshes without resource drift.
+                    stack_status="NO_DRIFT"
+                    stack_details="Root outputs need refresh only"
+                    echo "::notice title=Terraform output refresh ignored::${stack_name}"
+                  fi
                   ;;
                 *)
                   stack_status="ERROR"
+                  stack_details="Terraform plan failed"
                   found_error=true
                   echo "::error title=Terraform drift scan failed::${stack_name}"
                   ;;
               esac
 
-              printf '%s\t%s\n' "${stack_name}" "${stack_status}" >> "${results_file}"
+              printf '%s\t%s\t%s\n' \
+                "${stack_name}" \
+                "${stack_status}" \
+                "${stack_details}" \
+                >> "${results_file}"
+              rm -f "${plan_output}" "${plan_file}" "${plan_json}"
+              rmdir "${work_dir}"
             done
 
             if [[ "${found_error}" == "true" ]]; then
@@ -137,15 +196,16 @@ jobs:
             echo
             echo "Result: \`${final_status}\`"
             echo
-            echo "| Stack | Result |"
-            echo "| --- | --- |"
+            echo "| Stack | Result | Details |"
+            echo "| --- | --- | --- |"
             if [[ -s "${results_file}" ]]; then
-              while IFS=$'\t' read -r stack_name stack_status; do
+              while IFS=$'\t' read -r stack_name stack_status stack_details; do
                 safe_stack_name="${stack_name//|/\\|}"
-                echo "| \`${safe_stack_name}\` | \`${stack_status}\` |"
+                safe_stack_details="${stack_details//|/\\|}"
+                echo "| \`${safe_stack_name}\` | \`${stack_status}\` | ${safe_stack_details} |"
               done < "${results_file}"
             else
-              echo "| None | \`ERROR\` |"
+              echo "| None | \`ERROR\` | No Terraform roots found |"
             fi
           } >> "${GITHUB_STEP_SUMMARY}"
 
@@ -213,9 +273,12 @@ jobs:
 
           affected_lines=()
           if [[ -s "${results_file}" ]]; then
-            while IFS=$'\t' read -r stack_name stack_status; do
+            while IFS=$'\t' read -r stack_name stack_status stack_details; do
               if [[ "${stack_status}" != "NO_DRIFT" ]]; then
-                affected_lines+=("• <code>$(escape_html "${stack_name}")</code>: $(escape_html "${stack_status}")")
+                affected_lines+=(
+                  "• <code>$(escape_html "${stack_name}")</code>: $(escape_html "${stack_status}")"
+                  "  $(escape_html "${stack_details}")"
+                )
               fi
             done < "${results_file}"
           fi
