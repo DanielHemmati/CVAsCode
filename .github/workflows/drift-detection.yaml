@@ -1,0 +1,279 @@
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
+name: Terraform drift detection
+
+on:
+  schedule:
+    - cron: "0 */12 * * *"
+  workflow_dispatch: {}
+
+permissions: {}
+
+concurrency:
+  group: terraform-drift-detection
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: us-east-1
+  AWS_ROLE_ARN: arn:aws:iam::814023476338:role/github-actions-cvascode
+  TERRAFORM_VERSION: "1.16.1"
+  TF_IN_AUTOMATION: "true"
+  TF_INPUT: "false"
+
+jobs:
+  detect:
+    name: Detect Terraform drift
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    environment:
+      name: production
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Check out default branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+
+      - name: Install Terraform
+        uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+          terraform_wrapper: false
+
+      - name: Authenticate with AWS
+        uses: aws-actions/configure-aws-credentials@8df5847569e6427dd6c4fb1cf565c83acfa8afa7 # v6.0.0
+        with:
+          role-to-assume: ${{ env.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Scan live Terraform roots
+        shell: bash
+        run: |
+          set -uo pipefail
+
+          results_file="${RUNNER_TEMP}/drift-results.tsv"
+          : > "${results_file}"
+
+          mapfile -t backend_files < <(git ls-files "terraform/live/**/backend.tf")
+
+          if (( ${#backend_files[@]} == 0 )); then
+            echo "::error::No live Terraform roots with a backend.tf file were found."
+            final_status="ERROR"
+          else
+            found_drift=false
+            found_error=false
+
+            for backend_file in "${backend_files[@]}"; do
+              stack_path="${backend_file%/backend.tf}"
+              stack_name="${stack_path#terraform/live/}"
+              init_output="${RUNNER_TEMP}/terraform-init-${RANDOM}.txt"
+              plan_output="${RUNNER_TEMP}/terraform-plan-${RANDOM}.txt"
+
+              echo "Scanning ${stack_name}."
+
+              if ! terraform -chdir="${stack_path}" init \
+                -input=false \
+                -lockfile=readonly \
+                > "${init_output}" 2>&1; then
+                echo "::error title=Terraform initialization failed::${stack_name}"
+                printf '%s\t%s\n' "${stack_name}" "ERROR" >> "${results_file}"
+                found_error=true
+                rm -f "${init_output}" "${plan_output}"
+                continue
+              fi
+              rm -f "${init_output}"
+
+              if terraform -chdir="${stack_path}" plan \
+                -detailed-exitcode \
+                -input=false \
+                -lock-timeout=5m \
+                -no-color \
+                -refresh-only \
+                > "${plan_output}" 2>&1; then
+                plan_exit_code=0
+              else
+                plan_exit_code=$?
+              fi
+              rm -f "${plan_output}"
+
+              case "${plan_exit_code}" in
+                0)
+                  stack_status="NO_DRIFT"
+                  ;;
+                2)
+                  stack_status="DRIFT_FOUND"
+                  found_drift=true
+                  echo "::warning title=Terraform drift found::${stack_name}"
+                  ;;
+                *)
+                  stack_status="ERROR"
+                  found_error=true
+                  echo "::error title=Terraform drift scan failed::${stack_name}"
+                  ;;
+              esac
+
+              printf '%s\t%s\n' "${stack_name}" "${stack_status}" >> "${results_file}"
+            done
+
+            if [[ "${found_error}" == "true" ]]; then
+              final_status="ERROR"
+            elif [[ "${found_drift}" == "true" ]]; then
+              final_status="DRIFT_FOUND"
+            else
+              final_status="NO_DRIFT"
+            fi
+          fi
+
+          checked_sha="$(git rev-parse HEAD)"
+          {
+            echo "DRIFT_STATUS=${final_status}"
+            echo "CHECKED_SHA=${checked_sha}"
+          } >> "${GITHUB_ENV}"
+
+          {
+            echo "# Terraform drift detection"
+            echo
+            echo "Result: \`${final_status}\`"
+            echo
+            echo "| Stack | Result |"
+            echo "| --- | --- |"
+            if [[ -s "${results_file}" ]]; then
+              while IFS=$'\t' read -r stack_name stack_status; do
+                safe_stack_name="${stack_name//|/\\|}"
+                echo "| \`${safe_stack_name}\` | \`${stack_status}\` |"
+              done < "${results_file}"
+            else
+              echo "| None | \`ERROR\` |"
+            fi
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Send Telegram result
+        if: always()
+        shell: bash
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          EVENT_COMMIT: ${{ github.sha }}
+          REPOSITORY: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_NUMBER: ${{ github.run_number }}
+          SERVER_URL: ${{ github.server_url }}
+        run: |
+          set -euo pipefail
+
+          if [[ -z "${DRIFT_STATUS:-}" ]]; then
+            {
+              echo "# Terraform drift detection"
+              echo
+              echo "Result: \`ERROR\`"
+              echo
+              echo "The scan did not complete."
+            } >> "${GITHUB_STEP_SUMMARY}"
+          fi
+
+          if [[ -z "${TELEGRAM_BOT_TOKEN}" || -z "${TELEGRAM_CHAT_ID}" ]]; then
+            echo "::error::TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID secrets are required."
+            exit 1
+          fi
+
+          results_file="${RUNNER_TEMP}/drift-results.tsv"
+          status="${DRIFT_STATUS:-ERROR}"
+          commit_sha="${CHECKED_SHA:-${EVENT_COMMIT}}"
+          workflow_url="${SERVER_URL}/${REPOSITORY}/actions/runs/${RUN_ID}"
+          run_time="$(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+
+          escape_html() {
+            local escaped="${1}"
+            escaped="${escaped//&/'&amp;'}"
+            escaped="${escaped//</'&lt;'}"
+            escaped="${escaped//>/'&gt;'}"
+            escaped="${escaped//\"/'&quot;'}"
+            printf '%s' "${escaped}"
+          }
+
+          case "${status}" in
+            NO_DRIFT)
+              status_icon="✅"
+              status_text="No drift found"
+              disable_notification=true
+              ;;
+            DRIFT_FOUND)
+              status_icon="⚠️"
+              status_text="Drift found"
+              disable_notification=false
+              ;;
+            *)
+              status_icon="❌"
+              status_text="Detection error"
+              disable_notification=false
+              ;;
+          esac
+
+          affected_lines=()
+          if [[ -s "${results_file}" ]]; then
+            while IFS=$'\t' read -r stack_name stack_status; do
+              if [[ "${stack_status}" != "NO_DRIFT" ]]; then
+                affected_lines+=("• <code>$(escape_html "${stack_name}")</code>: $(escape_html "${stack_status}")")
+              fi
+            done < "${results_file}"
+          fi
+
+          if (( ${#affected_lines[@]} == 0 )); then
+            if [[ "${status}" == "NO_DRIFT" ]]; then
+              affected_lines+=("None")
+            else
+              affected_lines+=("The scan did not complete.")
+            fi
+          fi
+
+          message_lines=(
+            "${status_icon} <b>Terraform drift detection</b>"
+            "Result: <b>$(escape_html "${status_text}")</b>"
+            "Repository: <code>$(escape_html "${REPOSITORY}")</code>"
+            "Run: <a href=\"$(escape_html "${workflow_url}")\">#$(escape_html "${RUN_NUMBER}")</a>"
+            "Commit: <code>$(escape_html "${commit_sha:0:7}")</code>"
+            "Time: $(escape_html "${run_time}")"
+            ""
+            "<b>Affected stacks</b>"
+            "${affected_lines[@]}"
+          )
+          message="$(printf '%s\n' "${message_lines[@]}")"
+          response_file="${RUNNER_TEMP}/telegram-response.json"
+
+          if ! curl \
+            --fail-with-body \
+            --silent \
+            --show-error \
+            --request POST \
+            --url "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+            --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
+            --data-urlencode "text=${message}" \
+            --data-urlencode "parse_mode=HTML" \
+            --data-urlencode "disable_web_page_preview=true" \
+            --data-urlencode "disable_notification=${disable_notification}" \
+            --output "${response_file}"; then
+            rm -f "${response_file}"
+            echo "::error::Telegram rejected the drift detection notification."
+            exit 1
+          fi
+          rm -f "${response_file}"
+
+      - name: Set final workflow result
+        if: always()
+        shell: bash
+        run: |
+          case "${DRIFT_STATUS:-ERROR}" in
+            NO_DRIFT)
+              exit 0
+              ;;
+            DRIFT_FOUND)
+              echo "::error::Terraform drift was found."
+              exit 1
+              ;;
+            *)
+              echo "::error::Terraform drift detection did not complete."
+              exit 1
+              ;;
+          esac
