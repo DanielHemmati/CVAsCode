@@ -250,6 +250,20 @@ jobs:
           plan_version="$(put_private_file "${plan_dir}/terraform.tfplan" "${plan_key}")"
           plan_text_version="$(put_private_file "${plan_dir}/plan.txt" "${plan_text_key}")"
 
+          package_path="build/resume-summary.zip"
+          package_key=""
+          package_version=""
+          package_digest=""
+
+          if [[ -f "${TF_ROOT}/${package_path}" ]]; then
+            read -r package_digest _ < <(sha256sum "${TF_ROOT}/${package_path}")
+            package_key="${PLAN_PREFIX}/packages/resume-summary-${package_digest}.zip"
+            package_version="$(put_private_file "${TF_ROOT}/${package_path}" "${package_key}")"
+          elif [[ "${TF_ROOT}" == "terraform/live/prod/resume-summary" ]]; then
+            echo "::error::The resume summary Lambda package was not created during planning."
+            exit 1
+          fi
+
           jq -n \
             --arg bucket "${TF_PLAN_BUCKET}" \
             --arg plan_key "${plan_key}" \
@@ -257,13 +271,25 @@ jobs:
             --arg plan_digest "${plan_digest}" \
             --arg plan_text_key "${plan_text_key}" \
             --arg plan_text_version "${plan_text_version}" \
+            --arg package_path "${package_path}" \
+            --arg package_key "${package_key}" \
+            --arg package_version "${package_version}" \
+            --arg package_digest "${package_digest}" \
             '{
               bucket: $bucket,
               plan_key: $plan_key,
               plan_version: $plan_version,
               plan_digest: $plan_digest,
               plan_text_key: $plan_text_key,
-              plan_text_version: $plan_text_version
+              plan_text_version: $plan_text_version,
+              lambda_package: (
+                if $package_key == "" then null else {
+                  path: $package_path,
+                  key: $package_key,
+                  version: $package_version,
+                  digest: $package_digest
+                } end
+              )
             }' > "${plan_dir}/manifest.json"
 
           echo "Private plan: s3://${TF_PLAN_BUCKET}/${plan_text_key} (version ${plan_text_version})"
@@ -325,6 +351,7 @@ jobs:
       - name: Download saved plan
         env:
           PLAN_PREFIX: stacks/${{ matrix.name }}/runs/${{ github.run_id }}/attempt-${{ github.run_attempt }}/${{ github.sha }}
+          TF_ROOT: ${{ matrix.path }}
         run: |
           set -euo pipefail
 
@@ -336,6 +363,10 @@ jobs:
           plan_key="$(jq -er '.plan_key' "${manifest}")"
           plan_version="$(jq -er '.plan_version' "${manifest}")"
           expected_digest="$(jq -er '.plan_digest' "${manifest}")"
+          package_path="$(jq -r '.lambda_package.path // empty' "${manifest}")"
+          package_key="$(jq -r '.lambda_package.key // empty' "${manifest}")"
+          package_version="$(jq -r '.lambda_package.version // empty' "${manifest}")"
+          package_digest="$(jq -r '.lambda_package.digest // empty' "${manifest}")"
 
           if [[ ! "${expected_digest}" =~ ^[0-9a-f]{64}$ || -z "${plan_version}" ]]; then
             echo "::error::The plan manifest contains invalid integrity metadata."
@@ -357,6 +388,33 @@ jobs:
           read -r actual_digest _ < <(sha256sum "${plan_dir}/terraform.tfplan")
           if [[ "${actual_digest}" != "${expected_digest}" ]]; then
             echo "::error::The exact saved plan does not match the manifest SHA-256 digest."
+            exit 1
+          fi
+
+          if [[ -n "${package_key}" ]]; then
+            expected_package_key="${PLAN_PREFIX}/packages/resume-summary-${package_digest}.zip"
+            if [[ "${package_path}" != "build/resume-summary.zip" ||
+                  "${package_key}" != "${expected_package_key}" ||
+                  ! "${package_digest}" =~ ^[0-9a-f]{64}$ ||
+                  -z "${package_version}" ]]; then
+              echo "::error::The Lambda package manifest contains invalid integrity metadata."
+              exit 1
+            fi
+
+            mkdir -p "${TF_ROOT}/$(dirname "${package_path}")"
+            aws s3api get-object \
+              --bucket "${TF_PLAN_BUCKET}" \
+              --key "${package_key}" \
+              --version-id "${package_version}" \
+              "${TF_ROOT}/${package_path}" > /dev/null
+
+            read -r actual_package_digest _ < <(sha256sum "${TF_ROOT}/${package_path}")
+            if [[ "${actual_package_digest}" != "${package_digest}" ]]; then
+              echo "::error::The Lambda package does not match the manifest SHA-256 digest."
+              exit 1
+            fi
+          elif [[ "${TF_ROOT}" == "terraform/live/prod/resume-summary" ]]; then
+            echo "::error::The resume summary plan does not include its Lambda package."
             exit 1
           fi
 
