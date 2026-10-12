@@ -113,6 +113,28 @@ hr { border: 0; border-top: 1px solid var(--line); margin: 28px 0; }
   color: var(--muted);
 }
 
+.ai-summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 20px;
+  padding: 8px 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--page);
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--ink);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.ai-summary:hover,
+.ai-summary:focus-visible {
+  text-decoration: none;
+  border-color: var(--faint);
+  box-shadow: 0 2px 8px rgba(17, 19, 24, 0.08);
+}
+.ai-summary svg { width: 18px; height: 18px; flex: none; }
+
 .contact { display: grid; gap: 18px; }
 .contact li {
   display: flex;
@@ -354,7 +376,8 @@ a.project:focus-visible .proj-arrow { opacity: 1; transform: none; }
 
 @media print {
   body { background: #fff; padding: 0; font-size: 13px; }
-  .proj-arrow { display: none; }
+  .proj-arrow,
+  .ai-summary { display: none; }
   .resume { box-shadow: none; max-width: none; }
   .motto span.is-active { color: var(--muted); }
   * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
@@ -364,7 +387,8 @@ a.project:focus-visible .proj-arrow { opacity: 1; transform: none; }
 @media (prefers-reduced-motion: reduce) {
   .certs li:has(.cert-link),
   a.project,
-  .proj-arrow { transition: none; }
+  .proj-arrow,
+  .ai-summary { transition: none; }
   .certs li:has(.cert-link:hover),
   a.project:hover,
   a.project:focus-visible,
