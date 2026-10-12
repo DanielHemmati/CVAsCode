@@ -20,13 +20,6 @@ document.querySelectorAll(".job, .edu").forEach((job) => {
   }
 });
 
-// Point "Summarize with AI" at Claude with a prompt that includes this page's URL.
-const aiSummary = document.getElementById("ai-summary");
-if (aiSummary) {
-  const prompt = `Summarize the resume at ${location.href} in 5 short bullet points. Focus on skills, experience, and certifications.`;
-  aiSummary.href = `https://claude.ai/new?q=${encodeURIComponent(prompt)}`;
-}
-
 // Cycle a highlight through "Build / Learn / Ship / Repeat".
 const words = document.querySelectorAll("#motto span:not(.dash)");
 const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;

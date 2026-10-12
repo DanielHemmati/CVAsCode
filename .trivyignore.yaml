@@ -43,13 +43,3 @@ misconfigurations:
     paths:
       - "**/cloudfront-logging/athena-results.tf"
     statement: Athena query results use the approved SSE-S3 encryption instead of a customer-managed KMS key.
-
-  - id: AVD-AWS-0017
-    paths:
-      - "**/resume-summary/lambda.tf"
-    statement: The 7-day Lambda log group contains no prompt, resume, or response text and uses default CloudWatch encryption to avoid customer-managed KMS cost.
-
-  - id: AVD-AWS-0066
-    paths:
-      - "**/resume-summary/lambda.tf"
-    statement: X-Ray tracing is intentionally disabled until its added cost and permissions receive approval.

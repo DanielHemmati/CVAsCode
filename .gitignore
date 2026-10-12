@@ -96,7 +96,3 @@ env/
 node_modules/
 dist/
 build/
-
-# Keep the resume summary build directory, but ignore its artifacts.
-!terraform/live/prod/resume-summary/build/
-!terraform/live/prod/resume-summary/build/.gitignore
