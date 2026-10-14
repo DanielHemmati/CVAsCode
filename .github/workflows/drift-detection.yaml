@@ -2,8 +2,9 @@
 name: Terraform drift detection
 
 on:
+  # Run monthly because I am the only person who works on this project, so drift is unlikely.
   schedule:
-    - cron: "0 */12 * * *"
+    - cron: "0 0 15 * *"
   workflow_dispatch: {}
 
 permissions: {}
