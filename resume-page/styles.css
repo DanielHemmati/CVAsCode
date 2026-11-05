@@ -189,7 +189,8 @@ hr { border: 0; border-top: 1px solid var(--line); margin: 28px 0; }
   color: var(--muted);
 }
 
-.job + .job {
+.job + .job,
+.edu + .edu {
   margin-top: 28px;
   padding-top: 28px;
   border-top: 1px solid var(--line);
